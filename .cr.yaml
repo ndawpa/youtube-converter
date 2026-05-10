@@ -1,0 +1,4 @@
+chart-paths:
+  - helm
+pages-branch: gh-pages
+release-name-template: "{{ .Name }}-{{ .Version }}"
