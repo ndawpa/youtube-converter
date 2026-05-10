@@ -1,0 +1,16 @@
+services:
+  youtube-converter:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persists cookies across container restarts.
+      # Created automatically if missing; populate via the UI or by
+      # replacing this file with a real cookies.txt export.
+      - cookies:/app/data
+    environment:
+      - COOKIES_PATH=/app/data/cookies.txt
+    restart: unless-stopped
+
+volumes:
+  cookies:

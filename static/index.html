@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YouTube Converter</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f0f0f;
+      color: #e8e8e8;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 16px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #ff0000, #ff6b35);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    header p {
+      color: #888;
+      margin-top: 6px;
+      font-size: 0.95rem;
+    }
+
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 16px;
+      padding: 32px;
+      width: 100%;
+      max-width: 580px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #888;
+      margin-bottom: 8px;
+    }
+
+    input[type="url"] {
+      width: 100%;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: #e8e8e8;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="url"]:focus {
+      border-color: #ff4444;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    select {
+      width: 100%;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 11px 14px;
+      color: #e8e8e8;
+      font-size: 0.95rem;
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.2s;
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+    }
+
+    select:focus { border-color: #ff4444; }
+
+    #preview {
+      display: none;
+      margin-top: 24px;
+      padding: 16px;
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      display: none;
+      align-items: center;
+      gap: 14px;
+    }
+
+    #preview.visible { display: flex; }
+
+    #preview img {
+      width: 100px;
+      height: 56px;
+      object-fit: cover;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+
+    #preview .meta { overflow: hidden; }
+    #preview .meta .title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #preview .meta .sub {
+      font-size: 0.78rem;
+      color: #888;
+      margin-top: 3px;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    button {
+      flex: 1;
+      padding: 13px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    button:active { transform: scale(0.98); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #btn-preview {
+      background: #2a2a2a;
+      color: #ccc;
+    }
+
+    #btn-convert {
+      background: linear-gradient(135deg, #ff0000, #cc0000);
+      color: #fff;
+    }
+
+    #status {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 0.88rem;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #444;
+      border-top-color: #ff4444;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error { color: #ff6b6b; }
+    .success { color: #6bff8e; }
+    .info { color: #888; }
+
+    .format-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 28px;
+      justify-content: center;
+    }
+
+    .badge {
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 0.75rem;
+      color: #888;
+    }
+
+    footer {
+      margin-top: 40px;
+      color: #444;
+      font-size: 0.78rem;
+      text-align: center;
+    }
+
+    .cookies-banner {
+      width: 100%;
+      max-width: 580px;
+      margin-bottom: 16px;
+      background: #1a1200;
+      border: 1px solid #4a3500;
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 0.85rem;
+      color: #c8a63a;
+      display: none;
+    }
+
+    .cookies-banner.visible { display: block; }
+
+    .cookies-banner strong { color: #ffcc44; }
+
+    .cookies-banner details { margin-top: 10px; }
+    .cookies-banner summary {
+      cursor: pointer;
+      color: #ffaa22;
+      font-weight: 600;
+      user-select: none;
+    }
+    .cookies-banner ol {
+      margin: 8px 0 0 18px;
+      line-height: 1.7;
+      color: #b89030;
+    }
+    .cookies-banner a { color: #ffaa22; }
+
+    .cookies-upload-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .cookies-upload-row input[type="file"] {
+      flex: 1;
+      background: #111;
+      border: 1px dashed #4a3500;
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: #ccc;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    .cookies-upload-row button {
+      flex: none;
+      width: auto;
+      padding: 7px 14px;
+      font-size: 0.8rem;
+      background: #4a3500;
+      color: #ffcc44;
+      border-radius: 6px;
+    }
+
+    .cookies-ok {
+      width: 100%;
+      max-width: 580px;
+      margin-bottom: 16px;
+      background: #0a1a0a;
+      border: 1px solid #2a4a2a;
+      border-radius: 12px;
+      padding: 10px 18px;
+      font-size: 0.82rem;
+      color: #6bcc6b;
+      display: none;
+    }
+
+    .cookies-ok.visible { display: block; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>YouTube Converter</h1>
+    <p>Download YouTube videos in multiple formats</p>
+  </header>
+
+  <!-- Cookies status banners -->
+  <div id="cookies-ok" class="cookies-ok">
+    &#10003; YouTube session active — downloads ready.
+    <span id="re-sync-btns" style="margin-left:12px;"></span>
+  </div>
+  <div id="cookies-banner" class="cookies-banner">
+    <strong>YouTube login required.</strong>
+    Click the browser you are logged into YouTube with:
+    <div id="browser-btns" style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;"></div>
+    <details style="margin-top:14px;">
+      <summary>Upload cookies.txt manually instead</summary>
+      <ol style="margin:8px 0 8px 18px;line-height:1.8;color:#b89030;">
+        <li>Install <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank">Get cookies.txt LOCALLY</a> in Chrome/Edge.</li>
+        <li>Log in to YouTube, click the extension, export <code>cookies.txt</code>.</li>
+        <li>Upload it below.</li>
+      </ol>
+      <div class="cookies-upload-row">
+        <input type="file" id="cookies-file" accept=".txt,text/plain" />
+        <button onclick="uploadCookies()">Upload</button>
+      </div>
+    </details>
+    <div id="sync-msg" style="margin-top:10px;font-size:0.82rem;"></div>
+  </div>
+
+  <div class="card">
+    <label for="url">YouTube URL</label>
+    <input type="url" id="url" placeholder="https://www.youtube.com/watch?v=..." />
+
+    <div class="row">
+      <div>
+        <label for="format" style="margin-top:16px">Format</label>
+        <select id="format">
+          <option value="mp4">MP4 (Video)</option>
+          <option value="webm">WEBM (Video)</option>
+          <option value="mp3">MP3 (Audio)</option>
+          <option value="wav">WAV (Audio)</option>
+          <option value="aac">AAC (Audio)</option>
+        </select>
+      </div>
+      <div>
+        <label for="quality" style="margin-top:16px">Quality</label>
+        <select id="quality">
+          <option value="best">Best available</option>
+          <option value="720p">720p</option>
+          <option value="480p">480p</option>
+          <option value="360p">360p</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="preview">
+      <img id="thumb" src="" alt="thumbnail" />
+      <div class="meta">
+        <div class="title" id="vtitle"></div>
+        <div class="sub" id="vsub"></div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button id="btn-preview" onclick="fetchPreview()">Preview</button>
+      <button id="btn-convert" onclick="convert()">Convert &amp; Download</button>
+    </div>
+
+    <div id="status"></div>
+  </div>
+
+  <div class="format-badges">
+    <span class="badge">MP4</span>
+    <span class="badge">WEBM</span>
+    <span class="badge">MP3</span>
+    <span class="badge">WAV</span>
+    <span class="badge">AAC</span>
+  </div>
+
+  <footer>Powered by yt-dlp &amp; ffmpeg &bull; For personal use only</footer>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const previewEl = document.getElementById("preview");
+
+    function setStatus(html, type = "info") {
+      statusEl.innerHTML = `<span class="${type}">${html}</span>`;
+    }
+
+    function fmtDuration(s) {
+      const m = Math.floor(s / 60), sec = s % 60;
+      return `${m}:${sec.toString().padStart(2, "0")}`;
+    }
+
+    async function fetchPreview() {
+      const url = document.getElementById("url").value.trim();
+      if (!url) { setStatus("Paste a YouTube URL first.", "error"); return; }
+
+      setStatus('<span class="spinner"></span>Fetching info…');
+      document.getElementById("btn-preview").disabled = true;
+
+      try {
+        const res = await fetch("/info", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, format: "mp4" }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed");
+
+        document.getElementById("thumb").src = data.thumbnail;
+        document.getElementById("vtitle").textContent = data.title;
+        document.getElementById("vsub").textContent =
+          `${data.uploader} · ${fmtDuration(data.duration)}`;
+        previewEl.classList.add("visible");
+        setStatus("");
+      } catch (e) {
+        setStatus(e.message, "error");
+      } finally {
+        document.getElementById("btn-preview").disabled = false;
+      }
+    }
+
+    async function convert() {
+      const url = document.getElementById("url").value.trim();
+      const format = document.getElementById("format").value;
+      const quality = document.getElementById("quality").value;
+
+      if (!url) { setStatus("Paste a YouTube URL first.", "error"); return; }
+
+      setStatus('<span class="spinner"></span>Converting… this may take a moment');
+      document.getElementById("btn-convert").disabled = true;
+
+      try {
+        const res = await fetch("/convert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, format, quality }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || "Conversion failed");
+        }
+
+        const blob = await res.blob();
+        const disposition = res.headers.get("content-disposition") || "";
+        const match = disposition.match(/filename="(.+)"/);
+        const filename = match ? match[1] : `video.${format}`;
+
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+
+        setStatus("Download started!", "success");
+      } catch (e) {
+        setStatus(e.message, "error");
+      } finally {
+        document.getElementById("btn-convert").disabled = false;
+      }
+    }
+
+    // Allow pressing Enter in the URL input
+    document.getElementById("url").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") convert();
+    });
+
+    const BROWSERS = [
+      { key: "chrome",  label: "Chrome",  endpoint: "/sync-chrome",  icon: "🌐" },
+      { key: "edge",    label: "Edge",    endpoint: "/sync-edge",    icon: "🔷" },
+      { key: "firefox", label: "Firefox", endpoint: "/sync-firefox", icon: "🦊" },
+    ];
+
+    function makeSyncBtn(browser, available) {
+      const btn = document.createElement("button");
+      btn.id = `btn-sync-${browser.key}`;
+      btn.textContent = `${browser.icon} ${browser.label}`;
+      btn.style.cssText = `flex:1;min-width:100px;padding:10px;background:${available ? "#4a3500" : "#222"};` +
+        `color:${available ? "#ffcc44" : "#555"};border:1px solid ${available ? "#6a5000" : "#333"};` +
+        `border-radius:8px;font-size:0.88rem;font-weight:600;cursor:${available ? "pointer" : "not-allowed"};`;
+      if (available) btn.onclick = () => syncBrowser(browser);
+      else btn.title = `${browser.label} not detected on this machine`;
+      return btn;
+    }
+
+    async function checkCookies() {
+      const res = await fetch("/cookies-status");
+      const data = await res.json();
+      document.getElementById("cookies-ok").classList.toggle("visible", data.has_cookies);
+      document.getElementById("cookies-banner").classList.toggle("visible", !data.has_cookies);
+
+      const container = document.getElementById("browser-btns");
+      const reSync = document.getElementById("re-sync-btns");
+      container.innerHTML = "";
+      reSync.innerHTML = "";
+
+      for (const b of BROWSERS) {
+        const available = data[`${b.key}_available`] ?? false;
+        container.appendChild(makeSyncBtn(b, available));
+        if (data.has_cookies && available) {
+          const rb = document.createElement("button");
+          rb.textContent = `Re-sync ${b.label}`;
+          rb.style.cssText = "margin-left:6px;padding:3px 10px;font-size:0.75rem;background:#1a3a1a;color:#6bcc6b;border:1px solid #2a5a2a;border-radius:4px;cursor:pointer;";
+          rb.onclick = () => syncBrowser(b);
+          reSync.appendChild(rb);
+        }
+      }
+    }
+
+    async function syncBrowser(browser) {
+      const btn = document.getElementById(`btn-sync-${browser.key}`);
+      const msg = document.getElementById("sync-msg");
+      if (btn) btn.disabled = true;
+      msg.innerHTML = `<span class="spinner"></span>Reading ${browser.label} session…`;
+
+      try {
+        const res = await fetch(browser.endpoint, { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Sync failed");
+        if (!data.authenticated) {
+          msg.innerHTML = `<span class="error">No YouTube login found in ${browser.label}. Make sure you are logged in to YouTube in ${browser.label}, then try again.</span>`;
+        } else {
+          msg.innerHTML = "";
+          await checkCookies();
+        }
+      } catch (e) {
+        msg.innerHTML = `<span class="error">${e.message}</span>`;
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function uploadCookies() {
+      const file = document.getElementById("cookies-file").files[0];
+      if (!file) { alert("Select a cookies.txt file first."); return; }
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/upload-cookies", { method: "POST", body: form });
+      if (res.ok) checkCookies();
+      else alert("Upload failed.");
+    }
+
+    checkCookies();
+
+    // Auto-hide audio quality options for audio-only formats
+    document.getElementById("format").addEventListener("change", (e) => {
+      const audioFormats = ["mp3", "wav", "aac"];
+      const qualitySel = document.getElementById("quality");
+      const isAudio = audioFormats.includes(e.target.value);
+      Array.from(qualitySel.options).forEach((opt) => {
+        if (opt.value !== "best") opt.disabled = isAudio;
+      });
+      if (isAudio) qualitySel.value = "best";
+    });
+  </script>
+</body>
+</html>

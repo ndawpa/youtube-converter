@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+downloads/
+cookies.txt
+*.db
+*.sqlite
+.env
+.git/
+.gitignore
