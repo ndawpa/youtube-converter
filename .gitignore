@@ -6,3 +6,4 @@ cookies.txt
 *.db
 *.sqlite
 .env
+.claude/
