@@ -132,7 +132,7 @@ async def convert_video(req: ConvertRequest, background_tasks: BackgroundTasks):
     opts = build_ydl_opts(req.format, req.quality, output_template)
     try:
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, _download, opts, req.url)
+        title = await loop.run_in_executor(None, _download, opts, req.url)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Conversion failed: {str(e)}")
     candidates = list(DOWNLOADS_DIR.glob(f"{job_id}.*"))
@@ -141,9 +141,10 @@ async def convert_video(req: ConvertRequest, background_tasks: BackgroundTasks):
     output_file = str(candidates[0])
     actual_ext = candidates[0].suffix.lstrip(".")
     background_tasks.add_task(delete_file_later, output_file)
+    safe_title = (title or "video").strip() or "video"
     return FileResponse(
         path=output_file,
-        filename=f"video.{actual_ext}",
+        filename=f"{safe_title}.{actual_ext}",
         media_type="application/octet-stream",
     )
 
@@ -153,6 +154,9 @@ def _extract_info(url: str) -> dict:
         return ydl.extract_info(url, download=False)
 
 
-def _download(opts: dict, url: str):
+def _download(opts: dict, url: str) -> str:
     with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download([url])
+        info = ydl.extract_info(url, download=True)
+    if info and "entries" in info:
+        info = (info["entries"] or [{}])[0]
+    return (info or {}).get("title", "video")
