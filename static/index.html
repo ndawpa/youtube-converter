@@ -179,6 +179,25 @@
 
     footer { margin-top: 40px; color: #444; font-size: 0.78rem; text-align: center; }
 
+    .cookies-update {
+      width: 100%;
+      max-width: 580px;
+      margin-top: 12px;
+    }
+
+    .cookies-update summary {
+      cursor: pointer;
+      color: #555;
+      font-size: 0.78rem;
+      user-select: none;
+      text-align: center;
+      list-style: none;
+    }
+
+    .cookies-update summary::-webkit-details-marker { display: none; }
+
+    .cookies-update summary:hover { color: #888; }
+
     /* ── auth banners ── */
     .auth-banner {
       width: 100%;
@@ -290,6 +309,15 @@
 
     <div id="status"></div>
   </div>
+
+  <details class="cookies-update">
+    <summary>Update cookies.txt</summary>
+    <div class="upload-row" style="margin-top:10px;">
+      <input type="file" id="cookies-file-2" accept=".txt,text/plain" />
+      <button onclick="replaceCookies()">Upload</button>
+    </div>
+    <div id="replace-msg" style="margin-top:6px;font-size:0.82rem;"></div>
+  </details>
 
   <div class="format-badges">
     <span class="badge">MP4</span>
@@ -407,6 +435,25 @@
       });
       if (isAudio) qualitySel.value = "best";
     });
+
+    async function replaceCookies() {
+      const file = document.getElementById("cookies-file-2").files[0];
+      const msg  = document.getElementById("replace-msg");
+      if (!file) { msg.innerHTML = '<span class="error">Select a cookies.txt file first.</span>'; return; }
+      const form = new FormData();
+      form.append("file", file);
+      msg.innerHTML = '<span class="spinner"></span>Uploading…';
+      const res  = await fetch("/upload-cookies", { method: "POST", body: form });
+      const data = await res.json();
+      if (res.ok && data.authenticated) {
+        msg.innerHTML = '<span class="success">Cookies updated.</span>';
+        checkAuth();
+      } else if (res.ok) {
+        msg.innerHTML = '<span class="error">Uploaded but no YouTube login found in this file.</span>';
+      } else {
+        msg.innerHTML = '<span class="error">Upload failed.</span>';
+      }
+    }
 
     checkAuth();
   </script>

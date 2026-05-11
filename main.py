@@ -57,7 +57,9 @@ def base_ydl_opts() -> dict:
         "no_warnings": True,
         "extractor_args": {
             "youtube": {
-                "player_client": ["web", "ios", "android"] if has_cookies else ["ios", "android"]
+                # ios/android don't need cookies and bypass IP-based bot detection.
+                # web (with cookies) is kept as last resort for age-restricted content.
+                "player_client": ["ios", "android", "web"] if has_cookies else ["ios", "android"]
             }
         },
         **({"js_runtimes": {"node": {"path": NODE}}, "remote_components": {"ejs:github"}} if NODE else {}),
@@ -155,8 +157,15 @@ def _extract_info(url: str) -> dict:
 
 
 def _download(opts: dict, url: str) -> str:
+    title: dict = {}
+
+    def _hook(d: dict):
+        if "title" not in title:
+            t = (d.get("info_dict") or {}).get("title")
+            if t:
+                title["title"] = t
+
+    opts = {**opts, "progress_hooks": [_hook]}
     with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-    if info and "entries" in info:
-        info = (info["entries"] or [{}])[0]
-    return (info or {}).get("title", "video")
+        ydl.download([url])
+    return title.get("title", "video")
