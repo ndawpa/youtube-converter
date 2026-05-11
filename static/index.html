@@ -287,6 +287,47 @@
     }
 
     .cookies-ok.visible { display: block; }
+
+    .yt-login-btn {
+      flex: 1;
+      min-width: 160px;
+      padding: 10px 14px;
+      background: linear-gradient(135deg, #ff2020, #cc0000);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.01em;
+    }
+
+    .device-code-box {
+      margin-top: 14px;
+      padding: 16px;
+      background: #0d1a0d;
+      border: 1px solid #2a5a2a;
+      border-radius: 10px;
+    }
+
+    .device-code-box .step {
+      font-size: 0.85rem;
+      color: #aaa;
+      margin-bottom: 6px;
+    }
+
+    .device-code-value {
+      font-family: monospace;
+      font-size: 1.5rem;
+      letter-spacing: 0.2em;
+      color: #ffcc44;
+      background: #1a1200;
+      padding: 6px 16px;
+      border-radius: 6px;
+      border: 1px solid #4a3500;
+      display: inline-block;
+      margin: 4px 0 10px;
+    }
   </style>
 </head>
 <body>
@@ -316,6 +357,13 @@
         <button onclick="uploadCookies()">Upload</button>
       </div>
     </details>
+    <div id="login-flow" class="device-code-box" style="display:none;">
+      <div class="step">1. Open this link in your browser:</div>
+      <a id="device-url" href="#" target="_blank" style="color:#44aaff;font-size:0.9rem;word-break:break-all;"></a>
+      <div class="step" style="margin-top:10px;">2. Enter this code:</div>
+      <div class="device-code-value" id="device-code"></div>
+      <div style="color:#888;font-size:0.82rem;"><span class="spinner"></span> Waiting for you to complete the login…</div>
+    </div>
     <div id="sync-msg" style="margin-top:10px;font-size:0.82rem;"></div>
   </div>
 
@@ -487,29 +535,21 @@
       const reSync = document.getElementById("re-sync-btns");
       container.innerHTML = "";
       reSync.innerHTML = "";
+      container.style.display = "flex";
 
-      const anyAvailable = BROWSERS.some(b => data[`${b.key}_available`]);
+      // Always show the YouTube login button first
+      const ytBtn = document.createElement("button");
+      ytBtn.id = "btn-yt-login";
+      ytBtn.className = "yt-login-btn";
+      ytBtn.textContent = "▶ Login with YouTube";
+      ytBtn.onclick = startYouTubeLogin;
+      container.appendChild(ytBtn);
 
-      if (!anyAvailable) {
-        container.style.display = "flex";
-        // Show auto-sync script download button
-        const syncBtn = document.createElement("a");
-        syncBtn.href = "/sync_cookies.py";
-        syncBtn.download = "sync_cookies.py";
-        syncBtn.textContent = "⬇ Download auto-sync script";
-        syncBtn.style.cssText = "flex:1;min-width:180px;padding:10px 14px;background:#1a3a4a;color:#44aaff;" +
-          "border:1px solid #2a5a7a;border-radius:8px;font-size:0.88rem;font-weight:600;text-align:center;text-decoration:none;";
-        syncBtn.title = "Run this Python script on your Windows/WSL2 machine to auto-sync cookies";
-        container.appendChild(syncBtn);
-        document.getElementById("banner-subtitle").innerHTML =
-          ' No local browsers detected. <a href="/sync_cookies.py" download style="color:#44aaff">Download the sync script</a>' +
-          ' and run it on your machine to auto-upload cookies, or upload manually below:';
-        document.getElementById("upload-details").open = true;
-        document.getElementById("upload-summary").style.display = "none";
-      } else {
-        container.style.display = "flex";
+      const anyBrowserAvailable = BROWSERS.some(b => data[`${b.key}_available`]);
+
+      if (anyBrowserAvailable) {
         document.getElementById("banner-subtitle").textContent =
-          " Click the browser you are logged into YouTube with:";
+          " Log in with YouTube or sync from your browser:";
         document.getElementById("upload-details").open = false;
         document.getElementById("upload-summary").style.display = "";
 
@@ -524,6 +564,79 @@
             reSync.appendChild(rb);
           }
         }
+      } else {
+        document.getElementById("banner-subtitle").textContent =
+          " Log in with YouTube, or upload cookies manually:";
+        document.getElementById("upload-details").open = false;
+        document.getElementById("upload-summary").style.display = "";
+      }
+
+      // Show logout link if already authenticated via OAuth2
+      if (data.oauth2) {
+        const logoutBtn = document.createElement("button");
+        logoutBtn.textContent = "Log out";
+        logoutBtn.style.cssText = "flex:none;padding:4px 12px;font-size:0.78rem;background:#2a0a0a;color:#ff6b6b;border:1px solid #5a2a2a;border-radius:6px;cursor:pointer;";
+        logoutBtn.onclick = async () => {
+          await fetch("/login-oauth2", { method: "DELETE" });
+          checkCookies();
+        };
+        reSync.appendChild(logoutBtn);
+      }
+    }
+
+    let _pollInterval = null;
+
+    async function startYouTubeLogin() {
+      const btn = document.getElementById("btn-yt-login");
+      const flow = document.getElementById("login-flow");
+      const msg  = document.getElementById("sync-msg");
+
+      if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+      btn.disabled = true;
+      btn.textContent = "Connecting…";
+      msg.innerHTML = "";
+      flow.style.display = "none";
+
+      try {
+        const res = await fetch("/login-start", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to start login");
+
+        document.getElementById("device-url").href        = data.device_url;
+        document.getElementById("device-url").textContent = data.device_url;
+        document.getElementById("device-code").textContent = data.user_code || "—";
+        flow.style.display = "block";
+        btn.textContent = "Waiting for login…";
+
+        _pollInterval = setInterval(async () => {
+          try {
+            const pr = await fetch(`/login-poll/${data.session_id}`);
+            const pd = await pr.json();
+            if (!pd.done) return;
+
+            clearInterval(_pollInterval); _pollInterval = null;
+            flow.style.display = "none";
+            btn.disabled = false;
+            btn.textContent = "▶ Login with YouTube";
+
+            if (pd.success) {
+              msg.innerHTML = "";
+              await checkCookies();
+            } else {
+              msg.innerHTML = `<span class="error">Login failed: ${pd.error || "Unknown error. Please try again."}</span>`;
+            }
+          } catch (e) {
+            clearInterval(_pollInterval); _pollInterval = null;
+            msg.innerHTML = `<span class="error">${e.message}</span>`;
+            btn.disabled = false;
+            btn.textContent = "▶ Login with YouTube";
+          }
+        }, 5000);
+
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = "▶ Login with YouTube";
+        msg.innerHTML = `<span class="error">${e.message}</span>`;
       }
     }
 

@@ -1,12 +1,15 @@
 import base64
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
 import tempfile
+import threading
 import uuid
 import asyncio
+from dataclasses import dataclass, field
 from pathlib import Path
 from shutil import which
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
@@ -24,6 +27,10 @@ DOWNLOADS_DIR.mkdir(exist_ok=True)
 STATIC_DIR = Path("static")
 COOKIES_FILE = Path(os.environ.get("COOKIES_PATH", "cookies.txt"))
 COOKIES_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+YTDLP_CACHE = Path(os.environ.get("YTDLP_CACHE_DIR", str(COOKIES_FILE.parent / "yt-dlp-cache")))
+OAUTH2_FLAG = YTDLP_CACHE / "oauth2.done"
+YTDLP_CACHE.mkdir(parents=True, exist_ok=True)
 
 WINDOWS_USERS = Path("/mnt/c/Users")
 FIREFOX_BASE = "AppData/Roaming/Mozilla/Firefox/Profiles"
@@ -81,6 +88,86 @@ AUTH_COOKIES = {
     "__Secure-3PSID", "__Secure-3PAPISID", "__Secure-1PSID",
 }
 
+
+# ── OAuth2 device-code login ──────────────────────────────────────────────────
+
+@dataclass
+class _OAuthSession:
+    session_id: str
+    device_url: str | None = None
+    user_code: str | None = None
+    done: bool = False
+    success: bool = False
+    error: str | None = None
+    _url_ready: threading.Event = field(default_factory=threading.Event)
+
+
+_oauth_sessions: dict[str, _OAuthSession] = {}
+
+_URL_RE  = re.compile(r'https://\S*google\.com\S*device\S*', re.I)
+_CODE_RE = re.compile(r'code[:\s]+([A-Z0-9]{4}-[A-Z0-9]{4})', re.I)
+
+
+class _OAuthLogger:
+    """Captures the device-code URL/code printed by yt-dlp during OAuth2 flow."""
+    def __init__(self, session: _OAuthSession):
+        self._s = session
+
+    def _parse(self, msg: str):
+        if self._s.device_url and self._s.user_code:
+            return
+        url_m  = _URL_RE.search(msg)
+        code_m = _CODE_RE.search(msg)
+        if url_m:
+            self._s.device_url = url_m.group()
+        if code_m:
+            self._s.user_code = code_m.group(1)
+        if url_m or code_m:
+            self._s._url_ready.set()
+
+    def debug(self, msg: str):   self._parse(msg)
+    def warning(self, msg: str): self._parse(msg)
+    def error(self, msg: str):
+        self._s.error = msg
+        self._s._url_ready.set()
+
+
+def _oauth_token_cached() -> bool:
+    """True if yt-dlp cached an OAuth2 access_token (resilient to version changes)."""
+    try:
+        for f in YTDLP_CACHE.rglob("*.json"):
+            if '"access_token"' in f.read_text():
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _run_oauth_flow(session: _OAuthSession):
+    opts = {
+        "username": "oauth2",
+        "password": "",
+        "logger": _OAuthLogger(session),
+        "quiet": False,
+        "no_warnings": False,
+        "cachedir": str(YTDLP_CACHE),
+        **({"js_runtimes": {"node": {"path": NODE}}, "remote_components": {"ejs:github"}} if NODE else {}),
+    }
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            # Any public YouTube video triggers the login flow
+            ydl.extract_info("https://www.youtube.com/watch?v=jNQXAC9IVRw", download=False)
+        session.success = True
+    except Exception:
+        # Video extraction may fail after a successful OAuth2 auth — check the cache
+        session.success = _oauth_token_cached()
+    finally:
+        if session.success:
+            OAUTH2_FLAG.write_text("ok")
+        session.done = True
+        session._url_ready.set()
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 FORMAT_OPTIONS = {
@@ -125,25 +212,30 @@ def delete_file_later(path: str):
         pass
 
 
+def is_authenticated() -> bool:
+    return cookies_are_authenticated() or OAUTH2_FLAG.exists()
+
+
 def base_ydl_opts() -> dict:
     has_cookies = cookies_are_authenticated()
+    has_oauth   = OAUTH2_FLAG.exists()
+    has_auth    = has_cookies or has_oauth
     opts: dict = {
         "quiet": True,
         "no_warnings": True,
-        # ios/android bypass bot detection but don't support cookies.
-        # web supports cookies but needs them to pass bot detection.
+        "cachedir": str(YTDLP_CACHE),
         "extractor_args": {
             "youtube": {
-                # web client uses cookies; ios/android are fallbacks when web
-                # fails to enumerate formats (they skip cookies but still work)
-                "player_client": ["web", "ios", "android"] if has_cookies else ["ios", "android"]
+                "player_client": ["web", "ios", "android"] if has_auth else ["ios", "android"]
             }
         },
-        # Node.js solves YouTube's "n" parameter JS challenge (required for video URLs)
         **({"js_runtimes": {"node": {"path": NODE}}, "remote_components": {"ejs:github"}} if NODE else {}),
     }
     if has_cookies:
         opts["cookiefile"] = str(COOKIES_FILE)
+    if has_oauth:
+        opts["username"] = "oauth2"
+        opts["password"] = ""
     return opts
 
 
@@ -330,6 +422,59 @@ async def download_sync_script():
     return FileResponse(path=str(script), filename="sync_cookies.py", media_type="text/plain")
 
 
+@app.post("/login-start")
+async def login_start():
+    """Begin a YouTube OAuth2 device-code login flow."""
+    session_id = uuid.uuid4().hex
+    session = _OAuthSession(session_id=session_id)
+    _oauth_sessions[session_id] = session
+
+    thread = threading.Thread(target=_run_oauth_flow, args=(session,), daemon=True)
+    thread.start()
+
+    # Wait up to 25 s for yt-dlp to print the device URL
+    got_url = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: session._url_ready.wait(25)
+    )
+    if not got_url or (not session.device_url and not session.user_code):
+        _oauth_sessions.pop(session_id, None)
+        if session.error:
+            raise HTTPException(status_code=500, detail=session.error)
+        raise HTTPException(status_code=504, detail="Timed out waiting for Google device code.")
+
+    return {
+        "session_id": session_id,
+        "device_url": session.device_url or "https://www.google.com/device",
+        "user_code": session.user_code,
+    }
+
+
+@app.get("/login-poll/{session_id}")
+async def login_poll(session_id: str):
+    """Poll for OAuth2 login completion."""
+    session = _oauth_sessions.get(session_id)
+    if not session:
+        # Session already cleaned up — check persisted flag
+        return {"done": True, "success": OAUTH2_FLAG.exists()}
+    result = {"done": session.done, "success": session.success, "error": session.error}
+    if session.done:
+        _oauth_sessions.pop(session_id, None)
+    return result
+
+
+@app.delete("/login-oauth2")
+async def logout_oauth2():
+    """Clear the stored OAuth2 token."""
+    OAUTH2_FLAG.unlink(missing_ok=True)
+    for f in YTDLP_CACHE.rglob("*.json"):
+        try:
+            if '"access_token"' in f.read_text():
+                f.unlink()
+        except Exception:
+            pass
+    return {"ok": True}
+
+
 @app.get("/cookies-status")
 async def cookies_status():
     profiles = find_firefox_profiles()
@@ -338,7 +483,8 @@ async def cookies_status():
     edge_path = (user / EDGE_COOKIES) if user else None
     ps = _powershell_usable()
     return {
-        "has_cookies": cookies_are_authenticated(),
+        "has_cookies": is_authenticated(),
+        "oauth2": OAUTH2_FLAG.exists(),
         "firefox_available": len(profiles) > 0,
         "chrome_available": bool(ps and chrome_path and chrome_path.exists()),
         "edge_available": bool(ps and edge_path and edge_path.exists()),
