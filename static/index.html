@@ -192,12 +192,6 @@
 
     .auth-banner.visible { display: block; }
 
-    .auth-ok {
-      background: #0a1a0a;
-      border: 1px solid #2a4a2a;
-      color: #6bcc6b;
-    }
-
     .auth-warn {
       background: #1a1200;
       border: 1px solid #4a3500;
@@ -243,10 +237,6 @@
     <h1>YouTube Converter</h1>
     <p>Download YouTube videos in multiple formats</p>
   </header>
-
-  <div id="auth-ok" class="auth-banner auth-ok">
-    &#10003; YouTube session active — downloads ready.
-  </div>
 
   <div id="auth-warn" class="auth-banner auth-warn">
     <strong>YouTube login required.</strong>
@@ -324,7 +314,6 @@
     async function checkAuth() {
       const res  = await fetch("/cookies-status");
       const data = await res.json();
-      document.getElementById("auth-ok").classList.toggle("visible",  data.has_cookies);
       document.getElementById("auth-warn").classList.toggle("visible", !data.has_cookies);
     }
 
