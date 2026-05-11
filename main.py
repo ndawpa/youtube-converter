@@ -28,14 +28,9 @@ AUTH_COOKIES = {
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 FORMAT_OPTIONS = {
-    "mp4":  {"format": "bestvideo+bestaudio/best", "merge_output_format": "mp4",  "ext": "mp4"},
-    "webm": {"format": "bestvideo+bestaudio/best", "merge_output_format": "webm", "ext": "webm"},
-    "mp3":  {"format": "bestaudio/best", "ext": "mp3",
-             "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}]},
-    "wav":  {"format": "bestaudio/best", "ext": "wav",
-             "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "wav"}]},
-    "aac":  {"format": "bestaudio/best", "ext": "aac",
-             "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "aac"}]},
+    "mp4": {"format": "bestvideo+bestaudio/best", "merge_output_format": "mp4", "ext": "mp4"},
+    "mp3": {"format": "bestaudio/best", "ext": "mp3",
+            "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}]},
 }
 
 
@@ -74,12 +69,15 @@ def base_ydl_opts() -> dict:
 
 def build_ydl_opts(fmt: str, quality: str, output_path: str) -> dict:
     opts = {**base_ydl_opts(), **FORMAT_OPTIONS[fmt]}
-    if quality == "720p" and fmt in ("mp4", "webm"):
-        opts["format"] = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
-    elif quality == "480p" and fmt in ("mp4", "webm"):
-        opts["format"] = "bestvideo[height<=480]+bestaudio/best[height<=480]/best"
-    elif quality == "360p" and fmt in ("mp4", "webm"):
-        opts["format"] = "bestvideo[height<=360]+bestaudio/best[height<=360]/best"
+    if fmt == "mp4":
+        if quality == "1080p":
+            opts["format"] = "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
+        elif quality == "720p":
+            opts["format"] = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
+        elif quality == "480p":
+            opts["format"] = "bestvideo[height<=480]+bestaudio/best[height<=480]/best"
+        elif quality == "360p":
+            opts["format"] = "bestvideo[height<=360]+bestaudio/best[height<=360]/best"
     opts["outtmpl"] = output_path
     return opts
 
