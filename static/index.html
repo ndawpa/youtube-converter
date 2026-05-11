@@ -491,10 +491,19 @@
       const anyAvailable = BROWSERS.some(b => data[`${b.key}_available`]);
 
       if (!anyAvailable) {
-        // Running in a container or environment with no browser access
-        container.style.display = "none";
-        document.getElementById("banner-subtitle").textContent =
-          " No browsers detected — upload a cookies.txt file exported from your browser:";
+        container.style.display = "flex";
+        // Show auto-sync script download button
+        const syncBtn = document.createElement("a");
+        syncBtn.href = "/sync_cookies.py";
+        syncBtn.download = "sync_cookies.py";
+        syncBtn.textContent = "⬇ Download auto-sync script";
+        syncBtn.style.cssText = "flex:1;min-width:180px;padding:10px 14px;background:#1a3a4a;color:#44aaff;" +
+          "border:1px solid #2a5a7a;border-radius:8px;font-size:0.88rem;font-weight:600;text-align:center;text-decoration:none;";
+        syncBtn.title = "Run this Python script on your Windows/WSL2 machine to auto-sync cookies";
+        container.appendChild(syncBtn);
+        document.getElementById("banner-subtitle").innerHTML =
+          ' No local browsers detected. <a href="/sync_cookies.py" download style="color:#44aaff">Download the sync script</a>' +
+          ' and run it on your machine to auto-upload cookies, or upload manually below:';
         document.getElementById("upload-details").open = true;
         document.getElementById("upload-summary").style.display = "none";
       } else {

@@ -322,6 +322,14 @@ async def root():
     return HTMLResponse(content=(STATIC_DIR / "index.html").read_text())
 
 
+@app.get("/sync_cookies.py")
+async def download_sync_script():
+    script = Path("sync_cookies.py")
+    if not script.exists():
+        raise HTTPException(status_code=404, detail="Sync script not found.")
+    return FileResponse(path=str(script), filename="sync_cookies.py", media_type="text/plain")
+
+
 @app.get("/cookies-status")
 async def cookies_status():
     profiles = find_firefox_profiles()
