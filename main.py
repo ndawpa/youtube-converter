@@ -59,6 +59,23 @@ def _win_temp() -> Path:
 POWERSHELL = Path("/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe")
 NODE = which("node") or ""
 
+_powershell_usable_cache: bool | None = None
+
+def _powershell_usable() -> bool:
+    global _powershell_usable_cache
+    if _powershell_usable_cache is not None:
+        return _powershell_usable_cache
+    if not POWERSHELL.exists():
+        _powershell_usable_cache = False
+        return False
+    try:
+        r = subprocess.run([str(POWERSHELL), "-Version"], capture_output=True, timeout=5)
+        _powershell_usable_cache = r.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        # OSError [Errno 8]: .exe can't run in a Linux container (no WSL2 interop)
+        _powershell_usable_cache = False
+    return _powershell_usable_cache
+
 AUTH_COOKIES = {
     "SID", "HSID", "SSID", "APISID", "SAPISID", "LOGIN_INFO",
     "__Secure-3PSID", "__Secure-3PAPISID", "__Secure-1PSID",
@@ -117,7 +134,9 @@ def base_ydl_opts() -> dict:
         # web supports cookies but needs them to pass bot detection.
         "extractor_args": {
             "youtube": {
-                "player_client": ["web"] if has_cookies else ["ios", "android"]
+                # web client uses cookies; ios/android are fallbacks when web
+                # fails to enumerate formats (they skip cookies but still work)
+                "player_client": ["web", "ios", "android"] if has_cookies else ["ios", "android"]
             }
         },
         # Node.js solves YouTube's "n" parameter JS challenge (required for video URLs)
@@ -309,11 +328,12 @@ async def cookies_status():
     user = _win_user()
     chrome_path = (user / CHROME_COOKIES) if user else None
     edge_path = (user / EDGE_COOKIES) if user else None
+    ps = _powershell_usable()
     return {
         "has_cookies": cookies_are_authenticated(),
         "firefox_available": len(profiles) > 0,
-        "chrome_available": bool(chrome_path and chrome_path.exists()),
-        "edge_available": bool(edge_path and edge_path.exists()),
+        "chrome_available": bool(ps and chrome_path and chrome_path.exists()),
+        "edge_available": bool(ps and edge_path and edge_path.exists()),
     }
 
 
@@ -341,8 +361,8 @@ async def sync_chrome():
     cookies_db = user / CHROME_COOKIES
     if not local_state.exists() or not cookies_db.exists():
         raise HTTPException(status_code=404, detail="Chrome not found.")
-    if not POWERSHELL.exists():
-        raise HTTPException(status_code=500, detail="PowerShell not available.")
+    if not _powershell_usable():
+        raise HTTPException(status_code=500, detail="PowerShell not available (Chrome sync requires running outside a container, or on WSL2 directly).")
     try:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, export_chromium_cookies, local_state, cookies_db, COOKIES_FILE)
@@ -361,8 +381,8 @@ async def sync_edge():
     cookies_db = user / EDGE_COOKIES
     if not local_state.exists() or not cookies_db.exists():
         raise HTTPException(status_code=404, detail="Edge not found.")
-    if not POWERSHELL.exists():
-        raise HTTPException(status_code=500, detail="PowerShell not available.")
+    if not _powershell_usable():
+        raise HTTPException(status_code=500, detail="PowerShell not available (Edge sync requires running outside a container, or on WSL2 directly).")
     try:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, export_chromium_cookies, local_state, cookies_db, COOKIES_FILE)

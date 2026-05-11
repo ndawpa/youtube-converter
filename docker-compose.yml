@@ -5,9 +5,10 @@ services:
       - "8000:8000"
     volumes:
       # Persists cookies across container restarts.
-      # Created automatically if missing; populate via the UI or by
-      # replacing this file with a real cookies.txt export.
       - cookies:/app/data
+      # Expose Windows user directories so the container can auto-read browser cookies.
+      # On non-WSL2 hosts this path won't exist and Docker will skip the mount gracefully.
+      - /mnt/c/Users:/mnt/c/Users:ro
     environment:
       - COOKIES_PATH=/app/data/cookies.txt
     restart: unless-stopped

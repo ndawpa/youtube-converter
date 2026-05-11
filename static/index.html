@@ -302,13 +302,13 @@
   </div>
   <div id="cookies-banner" class="cookies-banner">
     <strong>YouTube login required.</strong>
-    Click the browser you are logged into YouTube with:
+    <span id="banner-subtitle"> Click the browser you are logged into YouTube with:</span>
     <div id="browser-btns" style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;"></div>
-    <details style="margin-top:14px;">
-      <summary>Upload cookies.txt manually instead</summary>
+    <details id="upload-details" style="margin-top:14px;">
+      <summary id="upload-summary">Upload cookies.txt manually instead</summary>
       <ol style="margin:8px 0 8px 18px;line-height:1.8;color:#b89030;">
         <li>Install <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank">Get cookies.txt LOCALLY</a> in Chrome/Edge.</li>
-        <li>Log in to YouTube, click the extension, export <code>cookies.txt</code>.</li>
+        <li>Log in to YouTube in your browser, click the extension icon, export <code>cookies.txt</code>.</li>
         <li>Upload it below.</li>
       </ol>
       <div class="cookies-upload-row">
@@ -488,15 +488,32 @@
       container.innerHTML = "";
       reSync.innerHTML = "";
 
-      for (const b of BROWSERS) {
-        const available = data[`${b.key}_available`] ?? false;
-        container.appendChild(makeSyncBtn(b, available));
-        if (data.has_cookies && available) {
-          const rb = document.createElement("button");
-          rb.textContent = `Re-sync ${b.label}`;
-          rb.style.cssText = "margin-left:6px;padding:3px 10px;font-size:0.75rem;background:#1a3a1a;color:#6bcc6b;border:1px solid #2a5a2a;border-radius:4px;cursor:pointer;";
-          rb.onclick = () => syncBrowser(b);
-          reSync.appendChild(rb);
+      const anyAvailable = BROWSERS.some(b => data[`${b.key}_available`]);
+
+      if (!anyAvailable) {
+        // Running in a container or environment with no browser access
+        container.style.display = "none";
+        document.getElementById("banner-subtitle").textContent =
+          " No browsers detected — upload a cookies.txt file exported from your browser:";
+        document.getElementById("upload-details").open = true;
+        document.getElementById("upload-summary").style.display = "none";
+      } else {
+        container.style.display = "flex";
+        document.getElementById("banner-subtitle").textContent =
+          " Click the browser you are logged into YouTube with:";
+        document.getElementById("upload-details").open = false;
+        document.getElementById("upload-summary").style.display = "";
+
+        for (const b of BROWSERS) {
+          const available = data[`${b.key}_available`] ?? false;
+          container.appendChild(makeSyncBtn(b, available));
+          if (data.has_cookies && available) {
+            const rb = document.createElement("button");
+            rb.textContent = `Re-sync ${b.label}`;
+            rb.style.cssText = "margin-left:6px;padding:3px 10px;font-size:0.75rem;background:#1a3a1a;color:#6bcc6b;border:1px solid #2a5a2a;border-radius:4px;cursor:pointer;";
+            rb.onclick = () => syncBrowser(b);
+            reSync.appendChild(rb);
+          }
         }
       }
     }
