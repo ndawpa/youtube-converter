@@ -18,10 +18,7 @@
       padding: 40px 16px;
     }
 
-    header {
-      text-align: center;
-      margin-bottom: 40px;
-    }
+    header { text-align: center; margin-bottom: 40px; }
 
     header h1 {
       font-size: 2rem;
@@ -32,11 +29,7 @@
       background-clip: text;
     }
 
-    header p {
-      color: #888;
-      margin-top: 6px;
-      font-size: 0.95rem;
-    }
+    header p { color: #888; margin-top: 6px; font-size: 0.95rem; }
 
     .card {
       background: #1a1a1a;
@@ -69,9 +62,7 @@
       transition: border-color 0.2s;
     }
 
-    input[type="url"]:focus {
-      border-color: #ff4444;
-    }
+    input[type="url"]:focus { border-color: #ff4444; }
 
     .row {
       display: grid;
@@ -107,7 +98,6 @@
       background: #111;
       border: 1px solid #2a2a2a;
       border-radius: 10px;
-      display: none;
       align-items: center;
       gap: 14px;
     }
@@ -130,17 +120,9 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    #preview .meta .sub {
-      font-size: 0.78rem;
-      color: #888;
-      margin-top: 3px;
-    }
+    #preview .meta .sub { font-size: 0.78rem; color: #888; margin-top: 3px; }
 
-    .btn-row {
-      display: flex;
-      gap: 10px;
-      margin-top: 24px;
-    }
+    .btn-row { display: flex; gap: 10px; margin-top: 24px; }
 
     button {
       flex: 1;
@@ -156,26 +138,14 @@
     button:active { transform: scale(0.98); }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    #btn-preview {
-      background: #2a2a2a;
-      color: #ccc;
-    }
+    #btn-preview { background: #2a2a2a; color: #ccc; }
+    #btn-convert { background: linear-gradient(135deg, #ff0000, #cc0000); color: #fff; }
 
-    #btn-convert {
-      background: linear-gradient(135deg, #ff0000, #cc0000);
-      color: #fff;
-    }
-
-    #status {
-      margin-top: 20px;
-      text-align: center;
-      font-size: 0.88rem;
-    }
+    #status { margin-top: 20px; text-align: center; font-size: 0.88rem; }
 
     .spinner {
       display: inline-block;
-      width: 16px;
-      height: 16px;
+      width: 16px; height: 16px;
       border: 2px solid #444;
       border-top-color: #ff4444;
       border-radius: 50%;
@@ -186,9 +156,9 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .error { color: #ff6b6b; }
+    .error   { color: #ff6b6b; }
     .success { color: #6bff8e; }
-    .info { color: #888; }
+    .info    { color: #888; }
 
     .format-badges {
       display: flex;
@@ -207,52 +177,46 @@
       color: #888;
     }
 
-    footer {
-      margin-top: 40px;
-      color: #444;
-      font-size: 0.78rem;
-      text-align: center;
-    }
+    footer { margin-top: 40px; color: #444; font-size: 0.78rem; text-align: center; }
 
-    .cookies-banner {
+    /* ── auth banners ── */
+    .auth-banner {
       width: 100%;
       max-width: 580px;
       margin-bottom: 16px;
-      background: #1a1200;
-      border: 1px solid #4a3500;
       border-radius: 12px;
       padding: 14px 18px;
       font-size: 0.85rem;
-      color: #c8a63a;
       display: none;
     }
 
-    .cookies-banner.visible { display: block; }
+    .auth-banner.visible { display: block; }
 
-    .cookies-banner strong { color: #ffcc44; }
-
-    .cookies-banner details { margin-top: 10px; }
-    .cookies-banner summary {
-      cursor: pointer;
-      color: #ffaa22;
-      font-weight: 600;
-      user-select: none;
+    .auth-ok {
+      background: #0a1a0a;
+      border: 1px solid #2a4a2a;
+      color: #6bcc6b;
     }
-    .cookies-banner ol {
-      margin: 8px 0 0 18px;
-      line-height: 1.7;
-      color: #b89030;
-    }
-    .cookies-banner a { color: #ffaa22; }
 
-    .cookies-upload-row {
+    .auth-warn {
+      background: #1a1200;
+      border: 1px solid #4a3500;
+      color: #c8a63a;
+    }
+
+    .auth-warn strong { color: #ffcc44; }
+
+    .auth-warn ol { margin: 8px 0 0 18px; line-height: 1.8; color: #b89030; }
+    .auth-warn a  { color: #ffaa22; }
+
+    .upload-row {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-top: 10px;
+      margin-top: 12px;
     }
 
-    .cookies-upload-row input[type="file"] {
+    .upload-row input[type="file"] {
       flex: 1;
       background: #111;
       border: 1px dashed #4a3500;
@@ -263,70 +227,14 @@
       cursor: pointer;
     }
 
-    .cookies-upload-row button {
+    .upload-row button {
       flex: none;
       width: auto;
-      padding: 7px 14px;
-      font-size: 0.8rem;
+      padding: 8px 16px;
+      font-size: 0.85rem;
       background: #4a3500;
       color: #ffcc44;
       border-radius: 6px;
-    }
-
-    .cookies-ok {
-      width: 100%;
-      max-width: 580px;
-      margin-bottom: 16px;
-      background: #0a1a0a;
-      border: 1px solid #2a4a2a;
-      border-radius: 12px;
-      padding: 10px 18px;
-      font-size: 0.82rem;
-      color: #6bcc6b;
-      display: none;
-    }
-
-    .cookies-ok.visible { display: block; }
-
-    .yt-login-btn {
-      flex: 1;
-      min-width: 160px;
-      padding: 10px 14px;
-      background: linear-gradient(135deg, #ff2020, #cc0000);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 0.88rem;
-      font-weight: 700;
-      cursor: pointer;
-      letter-spacing: 0.01em;
-    }
-
-    .device-code-box {
-      margin-top: 14px;
-      padding: 16px;
-      background: #0d1a0d;
-      border: 1px solid #2a5a2a;
-      border-radius: 10px;
-    }
-
-    .device-code-box .step {
-      font-size: 0.85rem;
-      color: #aaa;
-      margin-bottom: 6px;
-    }
-
-    .device-code-value {
-      font-family: monospace;
-      font-size: 1.5rem;
-      letter-spacing: 0.2em;
-      color: #ffcc44;
-      background: #1a1200;
-      padding: 6px 16px;
-      border-radius: 6px;
-      border: 1px solid #4a3500;
-      display: inline-block;
-      margin: 4px 0 10px;
     }
   </style>
 </head>
@@ -336,35 +244,21 @@
     <p>Download YouTube videos in multiple formats</p>
   </header>
 
-  <!-- Cookies status banners -->
-  <div id="cookies-ok" class="cookies-ok">
+  <div id="auth-ok" class="auth-banner auth-ok">
     &#10003; YouTube session active — downloads ready.
-    <span id="re-sync-btns" style="margin-left:12px;"></span>
   </div>
-  <div id="cookies-banner" class="cookies-banner">
+
+  <div id="auth-warn" class="auth-banner auth-warn">
     <strong>YouTube login required.</strong>
-    <span id="banner-subtitle"> Click the browser you are logged into YouTube with:</span>
-    <div id="browser-btns" style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;"></div>
-    <details id="upload-details" style="margin-top:14px;">
-      <summary id="upload-summary">Upload cookies.txt manually instead</summary>
-      <ol style="margin:8px 0 8px 18px;line-height:1.8;color:#b89030;">
-        <li>Install <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank">Get cookies.txt LOCALLY</a> in Chrome/Edge.</li>
-        <li>Log in to YouTube in your browser, click the extension icon, export <code>cookies.txt</code>.</li>
-        <li>Upload it below.</li>
-      </ol>
-      <div class="cookies-upload-row">
-        <input type="file" id="cookies-file" accept=".txt,text/plain" />
-        <button onclick="uploadCookies()">Upload</button>
-      </div>
-    </details>
-    <div id="login-flow" class="device-code-box" style="display:none;">
-      <div class="step">1. Open this link in your browser:</div>
-      <a id="device-url" href="#" target="_blank" style="color:#44aaff;font-size:0.9rem;word-break:break-all;"></a>
-      <div class="step" style="margin-top:10px;">2. Enter this code:</div>
-      <div class="device-code-value" id="device-code"></div>
-      <div style="color:#888;font-size:0.82rem;"><span class="spinner"></span> Waiting for you to complete the login…</div>
+    <p style="margin-top:6px;">
+      Install <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank">Get cookies.txt LOCALLY</a>
+      in Chrome or Edge, log in to YouTube, click the extension and export <code>cookies.txt</code>, then upload it here.
+    </p>
+    <div class="upload-row">
+      <input type="file" id="cookies-file" accept=".txt,text/plain" />
+      <button onclick="uploadCookies()">Upload</button>
     </div>
-    <div id="sync-msg" style="margin-top:10px;font-size:0.82rem;"></div>
+    <div id="upload-msg" style="margin-top:8px;font-size:0.82rem;"></div>
   </div>
 
   <div class="card">
@@ -397,7 +291,7 @@
       <img id="thumb" src="" alt="thumbnail" />
       <div class="meta">
         <div class="title" id="vtitle"></div>
-        <div class="sub" id="vsub"></div>
+        <div class="sub"   id="vsub"></div>
       </div>
     </div>
 
@@ -420,7 +314,7 @@
   <footer>Powered by yt-dlp &amp; ffmpeg &bull; For personal use only</footer>
 
   <script>
-    const statusEl = document.getElementById("status");
+    const statusEl  = document.getElementById("status");
     const previewEl = document.getElementById("preview");
 
     function setStatus(html, type = "info") {
@@ -432,26 +326,48 @@
       return `${m}:${sec.toString().padStart(2, "0")}`;
     }
 
+    async function checkAuth() {
+      const res  = await fetch("/cookies-status");
+      const data = await res.json();
+      document.getElementById("auth-ok").classList.toggle("visible",  data.has_cookies);
+      document.getElementById("auth-warn").classList.toggle("visible", !data.has_cookies);
+    }
+
+    async function uploadCookies() {
+      const file = document.getElementById("cookies-file").files[0];
+      const msg  = document.getElementById("upload-msg");
+      if (!file) { msg.innerHTML = '<span class="error">Select a cookies.txt file first.</span>'; return; }
+      const form = new FormData();
+      form.append("file", file);
+      msg.innerHTML = '<span class="spinner"></span>Uploading…';
+      const res  = await fetch("/upload-cookies", { method: "POST", body: form });
+      const data = await res.json();
+      if (res.ok && data.authenticated) {
+        msg.innerHTML = "";
+        checkAuth();
+      } else if (res.ok) {
+        msg.innerHTML = '<span class="error">File uploaded but no YouTube login found. Make sure you exported cookies while logged in to YouTube.</span>';
+      } else {
+        msg.innerHTML = '<span class="error">Upload failed.</span>';
+      }
+    }
+
     async function fetchPreview() {
       const url = document.getElementById("url").value.trim();
       if (!url) { setStatus("Paste a YouTube URL first.", "error"); return; }
-
       setStatus('<span class="spinner"></span>Fetching info…');
       document.getElementById("btn-preview").disabled = true;
-
       try {
-        const res = await fetch("/info", {
+        const res  = await fetch("/info", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url, format: "mp4" }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Failed");
-
-        document.getElementById("thumb").src = data.thumbnail;
+        document.getElementById("thumb").src       = data.thumbnail;
         document.getElementById("vtitle").textContent = data.title;
-        document.getElementById("vsub").textContent =
-          `${data.uploader} · ${fmtDuration(data.duration)}`;
+        document.getElementById("vsub").textContent   = `${data.uploader} · ${fmtDuration(data.duration)}`;
         previewEl.classList.add("visible");
         setStatus("");
       } catch (e) {
@@ -462,38 +378,31 @@
     }
 
     async function convert() {
-      const url = document.getElementById("url").value.trim();
-      const format = document.getElementById("format").value;
+      const url     = document.getElementById("url").value.trim();
+      const format  = document.getElementById("format").value;
       const quality = document.getElementById("quality").value;
-
       if (!url) { setStatus("Paste a YouTube URL first.", "error"); return; }
-
       setStatus('<span class="spinner"></span>Converting… this may take a moment');
       document.getElementById("btn-convert").disabled = true;
-
       try {
         const res = await fetch("/convert", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url, format, quality }),
         });
-
         if (!res.ok) {
           const err = await res.json();
           throw new Error(err.detail || "Conversion failed");
         }
-
-        const blob = await res.blob();
+        const blob        = await res.blob();
         const disposition = res.headers.get("content-disposition") || "";
-        const match = disposition.match(/filename="(.+)"/);
-        const filename = match ? match[1] : `video.${format}`;
-
+        const match       = disposition.match(/filename="(.+)"/);
+        const filename    = match ? match[1] : `video.${format}`;
         const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
+        a.href     = URL.createObjectURL(blob);
         a.download = filename;
         a.click();
         URL.revokeObjectURL(a.href);
-
         setStatus("Download started!", "success");
       } catch (e) {
         setStatus(e.message, "error");
@@ -502,189 +411,21 @@
       }
     }
 
-    // Allow pressing Enter in the URL input
     document.getElementById("url").addEventListener("keydown", (e) => {
       if (e.key === "Enter") convert();
     });
 
-    const BROWSERS = [
-      { key: "chrome",  label: "Chrome",  endpoint: "/sync-chrome",  icon: "🌐" },
-      { key: "edge",    label: "Edge",    endpoint: "/sync-edge",    icon: "🔷" },
-      { key: "firefox", label: "Firefox", endpoint: "/sync-firefox", icon: "🦊" },
-    ];
-
-    function makeSyncBtn(browser, available) {
-      const btn = document.createElement("button");
-      btn.id = `btn-sync-${browser.key}`;
-      btn.textContent = `${browser.icon} ${browser.label}`;
-      btn.style.cssText = `flex:1;min-width:100px;padding:10px;background:${available ? "#4a3500" : "#222"};` +
-        `color:${available ? "#ffcc44" : "#555"};border:1px solid ${available ? "#6a5000" : "#333"};` +
-        `border-radius:8px;font-size:0.88rem;font-weight:600;cursor:${available ? "pointer" : "not-allowed"};`;
-      if (available) btn.onclick = () => syncBrowser(browser);
-      else btn.title = `${browser.label} not detected on this machine`;
-      return btn;
-    }
-
-    async function checkCookies() {
-      const res = await fetch("/cookies-status");
-      const data = await res.json();
-      document.getElementById("cookies-ok").classList.toggle("visible", data.has_cookies);
-      document.getElementById("cookies-banner").classList.toggle("visible", !data.has_cookies);
-
-      const container = document.getElementById("browser-btns");
-      const reSync = document.getElementById("re-sync-btns");
-      container.innerHTML = "";
-      reSync.innerHTML = "";
-      container.style.display = "flex";
-
-      // Always show the YouTube login button first
-      const ytBtn = document.createElement("button");
-      ytBtn.id = "btn-yt-login";
-      ytBtn.className = "yt-login-btn";
-      ytBtn.textContent = "▶ Login with YouTube";
-      ytBtn.onclick = startYouTubeLogin;
-      container.appendChild(ytBtn);
-
-      const anyBrowserAvailable = BROWSERS.some(b => data[`${b.key}_available`]);
-
-      if (anyBrowserAvailable) {
-        document.getElementById("banner-subtitle").textContent =
-          " Log in with YouTube or sync from your browser:";
-        document.getElementById("upload-details").open = false;
-        document.getElementById("upload-summary").style.display = "";
-
-        for (const b of BROWSERS) {
-          const available = data[`${b.key}_available`] ?? false;
-          container.appendChild(makeSyncBtn(b, available));
-          if (data.has_cookies && available) {
-            const rb = document.createElement("button");
-            rb.textContent = `Re-sync ${b.label}`;
-            rb.style.cssText = "margin-left:6px;padding:3px 10px;font-size:0.75rem;background:#1a3a1a;color:#6bcc6b;border:1px solid #2a5a2a;border-radius:4px;cursor:pointer;";
-            rb.onclick = () => syncBrowser(b);
-            reSync.appendChild(rb);
-          }
-        }
-      } else {
-        document.getElementById("banner-subtitle").textContent =
-          " Log in with YouTube, or upload cookies manually:";
-        document.getElementById("upload-details").open = false;
-        document.getElementById("upload-summary").style.display = "";
-      }
-
-      // Show logout link if already authenticated via OAuth2
-      if (data.oauth2) {
-        const logoutBtn = document.createElement("button");
-        logoutBtn.textContent = "Log out";
-        logoutBtn.style.cssText = "flex:none;padding:4px 12px;font-size:0.78rem;background:#2a0a0a;color:#ff6b6b;border:1px solid #5a2a2a;border-radius:6px;cursor:pointer;";
-        logoutBtn.onclick = async () => {
-          await fetch("/login-oauth2", { method: "DELETE" });
-          checkCookies();
-        };
-        reSync.appendChild(logoutBtn);
-      }
-    }
-
-    let _pollInterval = null;
-
-    async function startYouTubeLogin() {
-      const btn = document.getElementById("btn-yt-login");
-      const flow = document.getElementById("login-flow");
-      const msg  = document.getElementById("sync-msg");
-
-      if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
-      btn.disabled = true;
-      btn.textContent = "Connecting…";
-      msg.innerHTML = "";
-      flow.style.display = "none";
-
-      try {
-        const res = await fetch("/login-start", { method: "POST" });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Failed to start login");
-
-        document.getElementById("device-url").href        = data.device_url;
-        document.getElementById("device-url").textContent = data.device_url;
-        document.getElementById("device-code").textContent = data.user_code || "—";
-        flow.style.display = "block";
-        btn.textContent = "Waiting for login…";
-
-        _pollInterval = setInterval(async () => {
-          try {
-            const pr = await fetch(`/login-poll/${data.session_id}`);
-            const pd = await pr.json();
-            if (!pd.done) return;
-
-            clearInterval(_pollInterval); _pollInterval = null;
-            flow.style.display = "none";
-            btn.disabled = false;
-            btn.textContent = "▶ Login with YouTube";
-
-            if (pd.success) {
-              msg.innerHTML = "";
-              await checkCookies();
-            } else {
-              msg.innerHTML = `<span class="error">Login failed: ${pd.error || "Unknown error. Please try again."}</span>`;
-            }
-          } catch (e) {
-            clearInterval(_pollInterval); _pollInterval = null;
-            msg.innerHTML = `<span class="error">${e.message}</span>`;
-            btn.disabled = false;
-            btn.textContent = "▶ Login with YouTube";
-          }
-        }, 5000);
-
-      } catch (e) {
-        btn.disabled = false;
-        btn.textContent = "▶ Login with YouTube";
-        msg.innerHTML = `<span class="error">${e.message}</span>`;
-      }
-    }
-
-    async function syncBrowser(browser) {
-      const btn = document.getElementById(`btn-sync-${browser.key}`);
-      const msg = document.getElementById("sync-msg");
-      if (btn) btn.disabled = true;
-      msg.innerHTML = `<span class="spinner"></span>Reading ${browser.label} session…`;
-
-      try {
-        const res = await fetch(browser.endpoint, { method: "POST" });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Sync failed");
-        if (!data.authenticated) {
-          msg.innerHTML = `<span class="error">No YouTube login found in ${browser.label}. Make sure you are logged in to YouTube in ${browser.label}, then try again.</span>`;
-        } else {
-          msg.innerHTML = "";
-          await checkCookies();
-        }
-      } catch (e) {
-        msg.innerHTML = `<span class="error">${e.message}</span>`;
-      } finally {
-        if (btn) btn.disabled = false;
-      }
-    }
-
-    async function uploadCookies() {
-      const file = document.getElementById("cookies-file").files[0];
-      if (!file) { alert("Select a cookies.txt file first."); return; }
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/upload-cookies", { method: "POST", body: form });
-      if (res.ok) checkCookies();
-      else alert("Upload failed.");
-    }
-
-    checkCookies();
-
-    // Auto-hide audio quality options for audio-only formats
     document.getElementById("format").addEventListener("change", (e) => {
       const audioFormats = ["mp3", "wav", "aac"];
-      const qualitySel = document.getElementById("quality");
-      const isAudio = audioFormats.includes(e.target.value);
-      Array.from(qualitySel.options).forEach((opt) => {
+      const qualitySel   = document.getElementById("quality");
+      const isAudio      = audioFormats.includes(e.target.value);
+      Array.from(qualitySel.options).forEach(opt => {
         if (opt.value !== "best") opt.disabled = isAudio;
       });
       if (isAudio) qualitySel.value = "best";
     });
+
+    checkAuth();
   </script>
 </body>
 </html>
