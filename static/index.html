@@ -328,6 +328,20 @@
       <button id="btn-convert" onclick="convert()">Convert &amp; Download</button>
     </div>
 
+    <div class="btn-row" style="margin-top:10px;">
+      <button id="btn-playlist" onclick="downloadPlaylist()" style="background:#1a2a1a;border:1px solid #2a4a2a;color:#6bdd8e;flex:1;">
+        Download Playlist (ZIP)
+      </button>
+    </div>
+
+    <div id="playlist-progress" style="display:none;margin-top:16px;padding:12px 14px;background:#111;border:1px solid #2a2a2a;border-radius:8px;font-size:0.85rem;">
+      <div id="playlist-bar-label" style="color:#888;margin-bottom:8px;"></div>
+      <div style="background:#222;border-radius:4px;height:6px;overflow:hidden;">
+        <div id="playlist-bar" style="height:100%;background:linear-gradient(90deg,#2a8a4a,#6bdd8e);width:0%;transition:width 0.4s;"></div>
+      </div>
+      <div id="playlist-current" style="color:#666;font-size:0.78rem;margin-top:6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;"></div>
+    </div>
+
     <div id="status"></div>
   </div>
 
@@ -485,6 +499,89 @@
       } else {
         msg.innerHTML = '<span class="error">Upload failed.</span>';
       }
+    }
+
+    async function downloadPlaylist() {
+      const url    = document.getElementById("url").value.trim();
+      const format = document.getElementById("format").value;
+      const quality = document.getElementById("quality").value;
+      const album  = document.getElementById("album").value.trim();
+      if (!url) { setStatus("Paste a YouTube playlist URL first.", "error"); return; }
+
+      const btn = document.getElementById("btn-playlist");
+      const progressEl = document.getElementById("playlist-progress");
+      const barEl      = document.getElementById("playlist-bar");
+      const labelEl    = document.getElementById("playlist-bar-label");
+      const currentEl  = document.getElementById("playlist-current");
+
+      btn.disabled = true;
+      document.getElementById("btn-convert").disabled = true;
+      progressEl.style.display = "block";
+      barEl.style.width = "0%";
+      labelEl.textContent = "Starting playlist download…";
+      currentEl.textContent = "";
+      setStatus("");
+
+      let jobId;
+      try {
+        const res = await fetch("/convert-playlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, format, quality, album }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || "Failed to start playlist job");
+        }
+        const data = await res.json();
+        jobId = data.job_id;
+      } catch (e) {
+        setStatus(e.message, "error");
+        progressEl.style.display = "none";
+        btn.disabled = false;
+        document.getElementById("btn-convert").disabled = false;
+        return;
+      }
+
+      const poll = setInterval(async () => {
+        try {
+          const res  = await fetch(`/playlist-status/${jobId}`);
+          const data = await res.json();
+
+          if (data.status === "running" || data.status === "pending") {
+            const pct = data.total > 0 ? Math.round((data.downloaded / data.total) * 100) : 0;
+            labelEl.textContent = data.total > 0
+              ? `Downloading track ${data.downloaded} of ${data.total} (${pct}%)`
+              : "Downloading…";
+            barEl.style.width = `${pct}%`;
+            if (data.current) currentEl.textContent = data.current;
+          } else if (data.status === "done") {
+            clearInterval(poll);
+            barEl.style.width = "100%";
+            labelEl.textContent = `Done! ${data.downloaded} track(s) downloaded.`;
+            currentEl.textContent = "";
+            const a = document.createElement("a");
+            a.href = `/playlist-download/${jobId}`;
+            a.click();
+            setStatus("Playlist ZIP download started!", "success");
+            setTimeout(() => { progressEl.style.display = "none"; }, 3000);
+            btn.disabled = false;
+            document.getElementById("btn-convert").disabled = false;
+          } else if (data.status === "error") {
+            clearInterval(poll);
+            progressEl.style.display = "none";
+            setStatus(data.error || "Playlist download failed.", "error");
+            btn.disabled = false;
+            document.getElementById("btn-convert").disabled = false;
+          }
+        } catch (e) {
+          clearInterval(poll);
+          progressEl.style.display = "none";
+          setStatus("Lost connection to server.", "error");
+          btn.disabled = false;
+          document.getElementById("btn-convert").disabled = false;
+        }
+      }, 2000);
     }
 
     checkAuth();

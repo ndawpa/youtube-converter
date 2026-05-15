@@ -1,7 +1,11 @@
 import os
+import shutil
 import subprocess
+import threading
 import uuid
+import zipfile
 import asyncio
+from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
@@ -43,6 +47,20 @@ class ConvertRequest(BaseModel):
     album: str = ""
 
 
+@dataclass
+class _PlaylistJob:
+    status: str = "pending"   # pending | running | done | error
+    total: int = 0
+    downloaded: int = 0
+    current: str = ""
+    playlist_title: str = "playlist"
+    zip_path: Path | None = None
+    error: str | None = None
+
+
+_playlist_jobs: dict[str, _PlaylistJob] = {}
+
+
 def cookies_are_authenticated() -> bool:
     if not COOKIES_FILE.exists():
         return False
@@ -60,8 +78,6 @@ def base_ydl_opts() -> dict:
         "no_warnings": True,
         "extractor_args": {
             "youtube": {
-                # ios/android don't need cookies and bypass IP-based bot detection.
-                # web (with cookies) is kept as last resort for age-restricted content.
                 "player_client": ["ios", "android", "web"] if has_cookies else ["ios", "android"]
             }
         },
@@ -88,7 +104,6 @@ def build_ydl_opts(fmt: str, quality: str, output_path: str) -> dict:
 
 
 def _embed_album(path: Path, album: str):
-    """Re-mux with ffmpeg to embed the album tag without re-encoding."""
     tmp = path.with_suffix(".tmp" + path.suffix)
     codec = ["-codec:a", "copy"] if path.suffix == ".mp3" else ["-codec", "copy"]
     subprocess.run(
@@ -103,6 +118,78 @@ def delete_file_later(path: str):
         os.remove(path)
     except FileNotFoundError:
         pass
+
+
+def _run_playlist(job_id: str, url: str, fmt: str, quality: str, album: str):
+    job = _playlist_jobs[job_id]
+    job.status = "running"
+    work_dir = DOWNLOADS_DIR / job_id
+    work_dir.mkdir(exist_ok=True)
+
+    # Quick metadata pass to get playlist title and track count
+    try:
+        with yt_dlp.YoutubeDL({**base_ydl_opts(), "extract_flat": True, "quiet": True}) as ydl:
+            meta = ydl.extract_info(url, download=False)
+            if meta:
+                job.playlist_title = meta.get("title") or "playlist"
+                entries = list(meta.get("entries") or [])
+                if entries:
+                    job.total = len(entries)
+    except Exception:
+        pass
+
+    def hook(d: dict):
+        info = d.get("info_dict") or {}
+        if job.total == 0 and info.get("playlist_count"):
+            job.total = info["playlist_count"]
+        if d.get("status") == "downloading":
+            job.current = info.get("title", "")
+        elif d.get("status") == "finished":
+            job.downloaded += 1
+            job.current = info.get("title", "")
+
+    opts = {
+        **base_ydl_opts(),
+        **FORMAT_OPTIONS[fmt],
+        "outtmpl": str(work_dir / "%(playlist_index)03d - %(title)s.%(ext)s"),
+        "progress_hooks": [hook],
+        "ignoreerrors": True,
+    }
+    if fmt == "mp4":
+        if quality == "1080p":
+            opts["format"] = "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
+        elif quality == "720p":
+            opts["format"] = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
+        elif quality == "480p":
+            opts["format"] = "bestvideo[height<=480]+bestaudio/best[height<=480]/best"
+        elif quality == "360p":
+            opts["format"] = "bestvideo[height<=360]+bestaudio/best[height<=360]/best"
+
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+    except Exception as e:
+        job.status = "error"
+        job.error = str(e)
+        shutil.rmtree(work_dir, ignore_errors=True)
+        return
+
+    if album:
+        for f in work_dir.iterdir():
+            try:
+                _embed_album(f, album)
+            except Exception:
+                pass
+
+    safe_title = job.playlist_title.replace("/", "").replace("\\", "").replace("\0", "") or "playlist"
+    zip_path = DOWNLOADS_DIR / f"{job_id}.zip"
+    with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in sorted(work_dir.iterdir()):
+            zf.write(f, f.name)
+
+    shutil.rmtree(work_dir, ignore_errors=True)
+    job.zip_path = zip_path
+    job.status = "done"
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -162,7 +249,7 @@ async def convert_video(req: ConvertRequest, background_tasks: BackgroundTasks):
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, _embed_album, output_file, req.album)
         except Exception:
-            pass  # non-fatal
+            pass
 
     base_name = req.filename.strip() or title or "video"
     safe_name = base_name.replace("/", "").replace("\\", "").replace("\0", "")
@@ -171,6 +258,55 @@ async def convert_video(req: ConvertRequest, background_tasks: BackgroundTasks):
         path=str(output_file),
         filename=f"{safe_name}.{actual_ext}",
         media_type="application/octet-stream",
+    )
+
+
+@app.post("/convert-playlist")
+async def convert_playlist(req: ConvertRequest):
+    if req.format not in FORMAT_OPTIONS:
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {req.format}")
+    job_id = uuid.uuid4().hex
+    _playlist_jobs[job_id] = _PlaylistJob()
+    thread = threading.Thread(
+        target=_run_playlist,
+        args=(job_id, req.url, req.format, req.quality, req.album),
+        daemon=True,
+    )
+    thread.start()
+    return {"job_id": job_id}
+
+
+@app.get("/playlist-status/{job_id}")
+async def playlist_status(job_id: str):
+    job = _playlist_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {
+        "status": job.status,
+        "total": job.total,
+        "downloaded": job.downloaded,
+        "current": job.current,
+        "error": job.error,
+    }
+
+
+@app.get("/playlist-download/{job_id}")
+async def playlist_download(job_id: str, background_tasks: BackgroundTasks):
+    job = _playlist_jobs.get(job_id)
+    if not job or job.status != "done" or not job.zip_path:
+        raise HTTPException(status_code=404, detail="Playlist not ready")
+    zip_path = job.zip_path
+    safe_title = job.playlist_title.replace("/", "").replace("\\", "").replace("\0", "") or "playlist"
+
+    def cleanup():
+        delete_file_later(str(zip_path))
+        _playlist_jobs.pop(job_id, None)
+
+    background_tasks.add_task(cleanup)
+    return FileResponse(
+        path=str(zip_path),
+        filename=f"{safe_title}.zip",
+        media_type="application/zip",
     )
 
 
