@@ -260,12 +260,20 @@
   </header>
 
   <div id="auth-warn" class="auth-banner auth-warn">
-    <strong>YouTube login required.</strong>
-    <p style="margin-top:6px;">
-      Install <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank">Get cookies.txt LOCALLY</a>
-      in Chrome or Edge, log in to YouTube, click the extension and export <code>cookies.txt</code>, then upload it here.
-    </p>
-    <div class="upload-row">
+    <strong>YouTube login required.</strong> To download videos, upload your YouTube session cookies:
+
+    <ol style="margin:10px 0 0 18px;line-height:2;">
+      <li>Open <strong>Chrome</strong> or <strong>Edge</strong> and go to
+        <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank">
+          Get cookies.txt LOCALLY
+        </a> — click <em>Add to Chrome</em> to install the extension.</li>
+      <li>Go to <a href="https://www.youtube.com" target="_blank">youtube.com</a> and <strong>sign in</strong> to your account.</li>
+      <li>Click the extension icon <span style="background:#333;border-radius:4px;padding:1px 6px;font-size:0.8rem;color:#ccc;">🍪</span> in the toolbar — make sure the active tab is YouTube.</li>
+      <li>Click <strong>Export</strong> — a <code>cookies.txt</code> file will be saved to your computer.</li>
+      <li>Upload that file below.</li>
+    </ol>
+
+    <div class="upload-row" style="margin-top:12px;">
       <input type="file" id="cookies-file" accept=".txt,text/plain" />
       <button onclick="uploadCookies()">Upload</button>
     </div>
@@ -325,6 +333,14 @@
 
   <details class="cookies-update">
     <summary>Update cookies.txt</summary>
+    <div style="margin-top:10px;font-size:0.82rem;color:#888;line-height:1.9;">
+      <strong style="color:#aaa;">How to export cookies:</strong>
+      <ol style="margin:4px 0 0 18px;">
+        <li>Install <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" style="color:#888;">Get cookies.txt LOCALLY</a> in Chrome or Edge.</li>
+        <li>Sign in to <a href="https://www.youtube.com" target="_blank" style="color:#888;">youtube.com</a>, then click the extension icon <span style="background:#222;border-radius:4px;padding:1px 5px;">🍪</span> while on YouTube.</li>
+        <li>Click <strong style="color:#aaa;">Export</strong> — upload the saved <code>cookies.txt</code> below.</li>
+      </ol>
+    </div>
     <div class="upload-row" style="margin-top:10px;">
       <input type="file" id="cookies-file-2" accept=".txt,text/plain" />
       <button onclick="replaceCookies()">Upload</button>
