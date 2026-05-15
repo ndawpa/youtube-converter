@@ -1,4 +1,5 @@
 import os
+import subprocess
 import uuid
 import asyncio
 from pathlib import Path
@@ -38,6 +39,8 @@ class ConvertRequest(BaseModel):
     url: str
     format: str
     quality: str = "best"
+    filename: str = ""
+    album: str = ""
 
 
 def cookies_are_authenticated() -> bool:
@@ -82,6 +85,17 @@ def build_ydl_opts(fmt: str, quality: str, output_path: str) -> dict:
             opts["format"] = "bestvideo[height<=360]+bestaudio/best[height<=360]/best"
     opts["outtmpl"] = output_path
     return opts
+
+
+def _embed_album(path: Path, album: str):
+    """Re-mux with ffmpeg to embed the album tag without re-encoding."""
+    tmp = path.with_suffix(".tmp" + path.suffix)
+    codec = ["-codec:a", "copy"] if path.suffix == ".mp3" else ["-codec", "copy"]
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(path), "-metadata", f"album={album}"] + codec + [str(tmp)],
+        check=True, capture_output=True,
+    )
+    tmp.replace(path)
 
 
 def delete_file_later(path: str):
@@ -140,13 +154,22 @@ async def convert_video(req: ConvertRequest, background_tasks: BackgroundTasks):
     candidates = list(DOWNLOADS_DIR.glob(f"{job_id}.*"))
     if not candidates:
         raise HTTPException(status_code=500, detail="Output file not found after conversion")
-    output_file = str(candidates[0])
-    actual_ext = candidates[0].suffix.lstrip(".")
-    background_tasks.add_task(delete_file_later, output_file)
-    safe_title = (title or "video").strip() or "video"
+    output_file = candidates[0]
+    actual_ext = output_file.suffix.lstrip(".")
+
+    if req.album:
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _embed_album, output_file, req.album)
+        except Exception:
+            pass  # non-fatal
+
+    base_name = req.filename.strip() or title or "video"
+    safe_name = base_name.replace("/", "").replace("\\", "").replace("\0", "")
+    background_tasks.add_task(delete_file_later, str(output_file))
     return FileResponse(
-        path=output_file,
-        filename=f"{safe_title}.{actual_ext}",
+        path=str(output_file),
+        filename=f"{safe_name}.{actual_ext}",
         media_type="application/octet-stream",
     )
 

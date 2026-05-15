@@ -296,6 +296,17 @@
       </div>
     </div>
 
+    <div class="row">
+      <div>
+        <label for="filename" style="margin-top:16px">Filename <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#555;">(optional)</span></label>
+        <input type="text" id="filename" placeholder="Leave blank to use video title" style="width:100%;background:#111;border:1px solid #333;border-radius:8px;padding:11px 14px;color:#e8e8e8;font-size:0.9rem;outline:none;" />
+      </div>
+      <div>
+        <label for="album" style="margin-top:16px">Album <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#555;">(optional)</span></label>
+        <input type="text" id="album" placeholder="Embedded in file properties" style="width:100%;background:#111;border:1px solid #333;border-radius:8px;padding:11px 14px;color:#e8e8e8;font-size:0.9rem;outline:none;" />
+      </div>
+    </div>
+
     <div id="preview">
       <img id="thumb" src="" alt="thumbnail" />
       <div class="meta">
@@ -392,9 +403,11 @@
     }
 
     async function convert() {
-      const url     = document.getElementById("url").value.trim();
-      const format  = document.getElementById("format").value;
-      const quality = document.getElementById("quality").value;
+      const url      = document.getElementById("url").value.trim();
+      const format   = document.getElementById("format").value;
+      const quality  = document.getElementById("quality").value;
+      const filename = document.getElementById("filename").value.trim();
+      const album    = document.getElementById("album").value.trim();
       if (!url) { setStatus("Paste a YouTube URL first.", "error"); return; }
       setStatus('<span class="spinner"></span>Converting… this may take a moment');
       document.getElementById("btn-convert").disabled = true;
@@ -402,7 +415,7 @@
         const res = await fetch("/convert", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url, format, quality }),
+          body: JSON.stringify({ url, format, quality, filename, album }),
         });
         if (!res.ok) {
           const err = await res.json();
