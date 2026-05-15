@@ -59,12 +59,7 @@ spec:
               mountPath: /app/downloads
       volumes:
         - name: data
-          {{- if .Values.persistence.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ include "youtube-converter.fullname" . }}-data
-          {{- else }}
           emptyDir: {}
-          {{- end }}
         - name: downloads
           emptyDir: {}
       {{- with .Values.nodeSelector }}

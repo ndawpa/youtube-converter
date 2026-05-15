@@ -33,10 +33,7 @@ ingress:
   #      - youtube-converter.example.com
 
 persistence:
-  enabled: true
-  storageClass: ""   # leave empty to use cluster default
-  accessMode: ReadWriteOnce
-  size: 1Gi
+  enabled: false
 
 resources:
   requests:
