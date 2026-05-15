@@ -54,6 +54,7 @@ class _PlaylistJob:
     downloaded: int = 0
     current: str = ""
     playlist_title: str = "playlist"
+    playlist_uploader: str = ""
     zip_path: Path | None = None
     error: str | None = None
 
@@ -103,11 +104,14 @@ def build_ydl_opts(fmt: str, quality: str, output_path: str) -> dict:
     return opts
 
 
-def _embed_album(path: Path, album: str):
+def _embed_album(path: Path, album: str, artist: str = ""):
     tmp = path.with_suffix(".tmp" + path.suffix)
     codec = ["-codec:a", "copy"] if path.suffix == ".mp3" else ["-codec", "copy"]
+    metadata = ["-metadata", f"album={album}"]
+    if artist:
+        metadata += ["-metadata", f"artist={artist}"]
     subprocess.run(
-        ["ffmpeg", "-y", "-i", str(path), "-metadata", f"album={album}"] + codec + [str(tmp)],
+        ["ffmpeg", "-y", "-i", str(path)] + metadata + codec + [str(tmp)],
         check=True, capture_output=True,
     )
     tmp.replace(path)
@@ -132,6 +136,7 @@ def _run_playlist(job_id: str, url: str, fmt: str, quality: str, album: str):
             meta = ydl.extract_info(url, download=False)
             if meta:
                 job.playlist_title = meta.get("title") or "playlist"
+                job.playlist_uploader = meta.get("uploader") or meta.get("channel") or ""
                 entries = list(meta.get("entries") or [])
                 if entries:
                     job.total = len(entries)
@@ -174,12 +179,12 @@ def _run_playlist(job_id: str, url: str, fmt: str, quality: str, album: str):
         shutil.rmtree(work_dir, ignore_errors=True)
         return
 
-    if album:
-        for f in work_dir.iterdir():
-            try:
-                _embed_album(f, album)
-            except Exception:
-                pass
+    embed_album = job.playlist_title or album or "playlist"
+    for f in work_dir.iterdir():
+        try:
+            _embed_album(f, embed_album, job.playlist_uploader)
+        except Exception:
+            pass
 
     safe_title = job.playlist_title.replace("/", "").replace("\\", "").replace("\0", "") or "playlist"
     zip_path = DOWNLOADS_DIR / f"{job_id}.zip"
