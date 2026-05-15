@@ -136,7 +136,10 @@ def _run_playlist(job_id: str, url: str, fmt: str, quality: str, album: str):
             meta = ydl.extract_info(url, download=False)
             if meta:
                 job.playlist_title = meta.get("title") or "playlist"
-                job.playlist_uploader = meta.get("uploader") or meta.get("channel") or ""
+                job.playlist_uploader = (
+                    meta.get("uploader") or meta.get("channel") or
+                    meta.get("uploader_id") or ""
+                )
                 entries = list(meta.get("entries") or [])
                 if entries:
                     job.total = len(entries)
@@ -147,6 +150,11 @@ def _run_playlist(job_id: str, url: str, fmt: str, quality: str, album: str):
         info = d.get("info_dict") or {}
         if job.total == 0 and info.get("playlist_count"):
             job.total = info["playlist_count"]
+        if not job.playlist_uploader:
+            job.playlist_uploader = (
+                info.get("playlist_uploader") or info.get("playlist_channel") or
+                info.get("uploader") or info.get("channel") or ""
+            )
         if d.get("status") == "downloading":
             job.current = info.get("title", "")
         elif d.get("status") == "finished":
