@@ -38,6 +38,13 @@ FORMAT_OPTIONS = {
             "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}]},
 }
 
+VIDEO_QUALITY_HEIGHTS = {
+    "1080p": 1080,
+    "720p": 720,
+    "480p": 480,
+    "360p": 360,
+}
+
 
 class ConvertRequest(BaseModel):
     url: str
@@ -77,11 +84,6 @@ def base_ydl_opts() -> dict:
     opts: dict = {
         "quiet": True,
         "no_warnings": True,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["ios", "android", "web"] if has_cookies else ["ios", "android"]
-            }
-        },
         **({"js_runtimes": {"node": {"path": NODE}}, "remote_components": {"ejs:github"}} if NODE else {}),
     }
     if has_cookies:
@@ -89,17 +91,21 @@ def base_ydl_opts() -> dict:
     return opts
 
 
+def video_format_for_quality(quality: str) -> str:
+    height = VIDEO_QUALITY_HEIGHTS.get(quality)
+    if height is None:
+        return FORMAT_OPTIONS["mp4"]["format"]
+
+    # A named resolution must not silently fall back to a lower-quality file.
+    # YouTube usually exposes 1080p as separate video/audio streams, hence the
+    # first selector; the second supports sources with a pre-merged stream.
+    return f"bestvideo[height={height}]+bestaudio/best[height={height}]"
+
+
 def build_ydl_opts(fmt: str, quality: str, output_path: str) -> dict:
     opts = {**base_ydl_opts(), **FORMAT_OPTIONS[fmt]}
     if fmt == "mp4":
-        if quality == "1080p":
-            opts["format"] = "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
-        elif quality == "720p":
-            opts["format"] = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
-        elif quality == "480p":
-            opts["format"] = "bestvideo[height<=480]+bestaudio/best[height<=480]/best"
-        elif quality == "360p":
-            opts["format"] = "bestvideo[height<=360]+bestaudio/best[height<=360]/best"
+        opts["format"] = video_format_for_quality(quality)
     opts["outtmpl"] = output_path
     return opts
 
@@ -169,14 +175,7 @@ def _run_playlist(job_id: str, url: str, fmt: str, quality: str, album: str):
         "ignoreerrors": True,
     }
     if fmt == "mp4":
-        if quality == "1080p":
-            opts["format"] = "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
-        elif quality == "720p":
-            opts["format"] = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
-        elif quality == "480p":
-            opts["format"] = "bestvideo[height<=480]+bestaudio/best[height<=480]/best"
-        elif quality == "360p":
-            opts["format"] = "bestvideo[height<=360]+bestaudio/best[height<=360]/best"
+        opts["format"] = video_format_for_quality(quality)
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
