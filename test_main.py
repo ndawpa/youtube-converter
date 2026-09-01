@@ -63,9 +63,20 @@ class DownloadOptionsTests(unittest.TestCase):
         self.assertTrue(opts["writethumbnail"])
         keys = [processor["key"] for processor in opts["postprocessors"]]
         self.assertEqual(keys, ["FFmpegSplitChapters", "EmbedThumbnail", "FFmpegMetadata"])
+        metadata_processor = opts["postprocessors"][-1]
+        self.assertFalse(metadata_processor["add_chapters"])
         metadata_args = opts["postprocessor_args"]["metadata"]
         self.assertIn("artist=Teacher", metadata_args)
         self.assertIn("album=Course", metadata_args)
+
+    @patch.object(main, "base_ydl_opts", return_value={})
+    def test_full_video_keeps_original_chapters(self, _base_opts):
+        request = main.ConvertRequest(
+            url="https://example.test", format="mp4", embed_thumbnail=False
+        )
+        opts = main.build_ydl_opts("mp4", "720p", "video.%(ext)s", request)
+
+        self.assertTrue(opts["postprocessors"][-1]["add_chapters"])
 
     def test_video_info_lists_formats_subtitles_and_chapters(self):
         result = main._format_info({

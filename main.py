@@ -187,7 +187,8 @@ def build_ydl_opts(fmt: str, quality: str, output_path: str,
             if end <= start:
                 raise ValueError("End time must be greater than start time")
             ranges.append([start, end])
-        if ranges or req.chapter_titles:
+        is_clipped = bool(ranges or req.chapter_titles)
+        if is_clipped:
             chapter_patterns = [f"^{re.escape(title)}$" for title in req.chapter_titles]
             opts["download_ranges"] = download_range_func(chapter_patterns, ranges)
             opts["force_keyframes_at_cuts"] = True
@@ -207,7 +208,14 @@ def build_ydl_opts(fmt: str, quality: str, output_path: str,
             "metadata": [item for key, value in metadata.items() if value
                          for item in ("-metadata", f"{key}={value}")]
         }
-        postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True, "add_chapters": True})
+        # Original chapter timestamps can extend beyond a downloaded section.
+        # Embedding them makes players report the source video's full duration
+        # and seek back to the beginning when the clipped media stream ends.
+        postprocessors.append({
+            "key": "FFmpegMetadata",
+            "add_metadata": True,
+            "add_chapters": not is_clipped,
+        })
 
     if postprocessors:
         opts["postprocessors"] = postprocessors
