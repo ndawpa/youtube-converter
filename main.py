@@ -42,7 +42,7 @@ app = FastAPI(title="YouTube Converter")
 
 DOWNLOADS_DIR = Path("downloads")
 DOWNLOADS_DIR.mkdir(exist_ok=True)
-MUSIC_DIR = Path(os.environ.get("MUSIC_LIBRARY_PATH", "music_library"))
+MUSIC_DIR = Path(os.environ.get("MUSIC_LIBRARY_PATH", str(DOWNLOADS_DIR / "music_library")))
 MUSIC_DIR.mkdir(parents=True, exist_ok=True)
 MUSIC_MANIFEST = MUSIC_DIR / "tracks.json"
 MAX_RENDER_JOBS = max(1, int(os.environ.get("MAX_RENDER_JOBS", "1")))

@@ -25,7 +25,8 @@ COPY main.py .
 COPY clip_engine.py .
 COPY static/ static/
 
-RUN mkdir -p downloads
+RUN mkdir -p downloads/music_library \
+    && chown -R 1000:1000 downloads
 
 EXPOSE 8000
 
