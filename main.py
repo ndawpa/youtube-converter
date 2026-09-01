@@ -5,14 +5,18 @@ import threading
 import uuid
 import zipfile
 import asyncio
+import json
+import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import yt_dlp
+from yt_dlp.utils import download_range_func
 
 app = FastAPI(title="YouTube Converter")
 
@@ -33,9 +37,14 @@ AUTH_COOKIES = {
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 FORMAT_OPTIONS = {
-    "mp4": {"format": "bestvideo+bestaudio/best", "merge_output_format": "mp4", "ext": "mp4"},
-    "mp3": {"format": "bestaudio/best", "ext": "mp3",
-            "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}]},
+    "mp4": {"kind": "video", "merge_output_format": "mp4"},
+    "webm": {"kind": "video", "merge_output_format": "webm"},
+    "mkv": {"kind": "video", "merge_output_format": "mkv"},
+    "mp3": {"kind": "audio", "codec": "mp3", "quality": "192"},
+    "m4a": {"kind": "audio", "codec": "m4a", "quality": "0"},
+    "opus": {"kind": "audio", "codec": "opus", "quality": "0"},
+    "flac": {"kind": "audio", "codec": "flac", "quality": "0"},
+    "wav": {"kind": "audio", "codec": "wav", "quality": "0"},
 }
 
 VIDEO_QUALITY_HEIGHTS = {
@@ -44,6 +53,7 @@ VIDEO_QUALITY_HEIGHTS = {
     "480p": 480,
     "360p": 360,
 }
+THUMBNAIL_FORMATS = {"mp3", "m4a", "opus", "flac", "mp4", "mkv"}
 
 
 class ConvertRequest(BaseModel):
@@ -52,6 +62,22 @@ class ConvertRequest(BaseModel):
     quality: str = "best"
     filename: str = ""
     album: str = ""
+    artist: str = ""
+    title: str = ""
+    year: str = ""
+    track: str = ""
+    embed_thumbnail: bool = True
+    compatibility: bool = False
+    start_time: float | None = Field(default=None, ge=0)
+    end_time: float | None = Field(default=None, gt=0)
+    split_chapters: bool = False
+    chapter_titles: list[str] = Field(default_factory=list)
+    subtitle_lang: str = ""
+    transcript_format: str = ""
+
+
+class CancelRequest(BaseModel):
+    job_id: str
 
 
 @dataclass
@@ -66,7 +92,25 @@ class _PlaylistJob:
     error: str | None = None
 
 
+@dataclass
+class _DownloadJob:
+    status: str = "pending"  # pending | running | done | error | cancelled
+    progress: float = 0
+    downloaded_bytes: int = 0
+    total_bytes: int = 0
+    speed: float = 0
+    eta: int | None = None
+    current: str = ""
+    title: str = "video"
+    filename: str = ""
+    output_path: Path | None = None
+    error: str | None = None
+    cancel_requested: bool = False
+    created_at: float = 0
+
+
 _playlist_jobs: dict[str, _PlaylistJob] = {}
+_download_jobs: dict[str, _DownloadJob] = {}
 
 
 def cookies_are_authenticated() -> bool:
@@ -92,9 +136,10 @@ def base_ydl_opts() -> dict:
 
 
 def video_format_for_quality(quality: str) -> str:
-    height = VIDEO_QUALITY_HEIGHTS.get(quality)
+    match = re.fullmatch(r"(\d{2,4})p", quality)
+    height = int(match.group(1)) if match else None
     if height is None:
-        return FORMAT_OPTIONS["mp4"]["format"]
+        return "bestvideo+bestaudio/best"
 
     # A named resolution must not silently fall back to a lower-quality file.
     # YouTube usually exposes 1080p as separate video/audio streams, hence the
@@ -102,12 +147,112 @@ def video_format_for_quality(quality: str) -> str:
     return f"bestvideo[height={height}]+bestaudio/best[height={height}]"
 
 
-def build_ydl_opts(fmt: str, quality: str, output_path: str) -> dict:
-    opts = {**base_ydl_opts(), **FORMAT_OPTIONS[fmt]}
+def video_format_for_container(fmt: str, quality: str, compatibility: bool = False) -> str:
+    match = re.fullmatch(r"(\d{2,4})p", quality)
+    height_filter = f"[height={match.group(1)}]" if match else ""
+    combined_filter = height_filter
+    if fmt == "webm":
+        return (f"bestvideo{height_filter}[ext=webm]+bestaudio[ext=webm]"
+                f"/best{combined_filter}[ext=webm]")
     if fmt == "mp4":
-        opts["format"] = video_format_for_quality(quality)
+        codec_filter = "[vcodec^=avc1]" if compatibility else ""
+        return (f"bestvideo{height_filter}[ext=mp4]{codec_filter}+bestaudio[ext=m4a]"
+                f"/bestvideo{height_filter}{codec_filter}+bestaudio"
+                f"/best{combined_filter}[ext=mp4]")
+    return video_format_for_quality(quality)
+
+
+def build_ydl_opts(fmt: str, quality: str, output_path: str,
+                   req: ConvertRequest | None = None) -> dict:
+    config = FORMAT_OPTIONS[fmt]
+    opts = {**base_ydl_opts(), "outtmpl": output_path}
+    postprocessors: list[dict] = []
+
+    if config["kind"] == "video":
+        opts["format"] = video_format_for_container(fmt, quality, bool(req and req.compatibility))
+        opts["merge_output_format"] = config["merge_output_format"]
+    else:
+        opts["format"] = "bestaudio/best"
+        postprocessors.append({
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": config["codec"],
+            "preferredquality": config["quality"],
+        })
+
+    if req:
+        ranges: list[list[float]] = []
+        if req.start_time is not None or req.end_time is not None:
+            start = req.start_time or 0
+            end = req.end_time or float("inf")
+            if end <= start:
+                raise ValueError("End time must be greater than start time")
+            ranges.append([start, end])
+        if ranges or req.chapter_titles:
+            chapter_patterns = [f"^{re.escape(title)}$" for title in req.chapter_titles]
+            opts["download_ranges"] = download_range_func(chapter_patterns, ranges)
+            opts["force_keyframes_at_cuts"] = True
+        if req.split_chapters:
+            postprocessors.append({"key": "FFmpegSplitChapters", "force_keyframes": False})
+        if req.embed_thumbnail and fmt in THUMBNAIL_FORMATS:
+            opts["writethumbnail"] = True
+            postprocessors.append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
+        metadata = {
+            "title": req.title,
+            "artist": req.artist,
+            "album": req.album,
+            "date": req.year,
+            "track_number": req.track,
+        }
+        opts["postprocessor_args"] = {
+            "metadata": [item for key, value in metadata.items() if value
+                         for item in ("-metadata", f"{key}={value}")]
+        }
+        postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True, "add_chapters": True})
+
+    if postprocessors:
+        opts["postprocessors"] = postprocessors
     opts["outtmpl"] = output_path
     return opts
+
+
+def safe_filename(value: str, fallback: str = "video") -> str:
+    cleaned = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", value).strip().rstrip(".")
+    return cleaned[:180] or fallback
+
+
+def _format_info(info: dict) -> dict:
+    video_formats: dict[tuple, dict] = {}
+    for fmt in info.get("formats") or []:
+        if fmt.get("vcodec") in (None, "none") or not fmt.get("height"):
+            continue
+        key = (fmt.get("height"), fmt.get("fps"), bool(fmt.get("dynamic_range") not in (None, "SDR")))
+        size = fmt.get("filesize") or fmt.get("filesize_approx") or 0
+        current = video_formats.get(key)
+        if not current or size > current["filesize"]:
+            video_formats[key] = {
+                "height": fmt.get("height"),
+                "width": fmt.get("width"),
+                "fps": fmt.get("fps"),
+                "hdr": key[2],
+                "filesize": size,
+                "ext": fmt.get("ext"),
+                "vcodec": fmt.get("vcodec"),
+            }
+    manual = info.get("subtitles") or {}
+    automatic = info.get("automatic_captions") or {}
+    languages = sorted(set(manual) | set(automatic))
+    return {
+        "title": info.get("title", "Unknown"),
+        "duration": info.get("duration", 0),
+        "thumbnail": info.get("thumbnail", ""),
+        "uploader": info.get("uploader") or info.get("channel") or "Unknown",
+        "formats": sorted(video_formats.values(), key=lambda item: (item["height"], item["fps"] or 0), reverse=True),
+        "subtitles": [{"language": lang, "manual": lang in manual, "automatic": lang in automatic}
+                      for lang in languages if lang != "live_chat"],
+        "chapters": [{"title": c.get("title") or f"Chapter {index + 1}",
+                      "start_time": c.get("start_time", 0), "end_time": c.get("end_time")}
+                     for index, c in enumerate(info.get("chapters") or [])],
+    }
 
 
 def _embed_album(path: Path, album: str, artist: str = ""):
@@ -128,6 +273,146 @@ def delete_file_later(path: str):
         os.remove(path)
     except FileNotFoundError:
         pass
+
+
+class DownloadCancelled(Exception):
+    pass
+
+
+def _subtitle_to_segments(path: Path) -> list[dict]:
+    timestamp = re.compile(
+        r"(?P<start>\d{1,2}:\d{2}:\d{2}[.,]\d{3})\s+-->\s+"
+        r"(?P<end>\d{1,2}:\d{2}:\d{2}[.,]\d{3})"
+    )
+    segments: list[dict] = []
+    current: dict | None = None
+    for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        match = timestamp.search(line)
+        if match:
+            if current and current["text"]:
+                segments.append(current)
+            current = {"start": match.group("start").replace(",", "."),
+                       "end": match.group("end").replace(",", "."), "text": ""}
+        elif current and line and not line.isdigit() and not line.startswith(("WEBVTT", "NOTE", "Kind:", "Language:")):
+            clean = re.sub(r"<[^>]+>", "", line)
+            if clean and clean not in current["text"].split("\n"):
+                current["text"] += ("\n" if current["text"] else "") + clean
+    if current and current["text"]:
+        segments.append(current)
+    return segments
+
+
+def _convert_transcript(source: Path, target_format: str) -> Path:
+    if target_format in {"vtt", "srt"} and source.suffix.lower() == f".{target_format}":
+        return source
+    segments = _subtitle_to_segments(source)
+    target = source.with_suffix(f".{target_format}")
+    if target_format == "json":
+        target.write_text(json.dumps({"segments": segments}, ensure_ascii=False, indent=2), encoding="utf-8")
+    elif target_format == "txt":
+        target.write_text("\n".join(segment["text"].replace("\n", " ") for segment in segments) + "\n",
+                          encoding="utf-8")
+    elif target_format == "srt":
+        blocks = [f"{index}\n{s['start'].replace('.', ',')} --> {s['end'].replace('.', ',')}\n{s['text']}"
+                  for index, s in enumerate(segments, 1)]
+        target.write_text("\n\n".join(blocks) + "\n", encoding="utf-8")
+    else:
+        raise ValueError(f"Unsupported transcript format: {target_format}")
+    if target != source:
+        source.unlink(missing_ok=True)
+    return target
+
+
+def _job_progress_hook(job: _DownloadJob):
+    def hook(data: dict):
+        if job.cancel_requested:
+            raise DownloadCancelled("Download cancelled")
+        info = data.get("info_dict") or {}
+        job.current = info.get("title") or job.current
+        if job.current:
+            job.title = job.current
+        if data.get("status") == "downloading":
+            job.downloaded_bytes = data.get("downloaded_bytes") or 0
+            job.total_bytes = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
+            job.speed = data.get("speed") or 0
+            job.eta = data.get("eta")
+            if job.total_bytes:
+                job.progress = min(99, job.downloaded_bytes * 100 / job.total_bytes)
+        elif data.get("status") == "finished":
+            job.progress = 99
+    return hook
+
+
+def _choose_output(work_dir: Path, requested_format: str) -> Path:
+    ignored = {".jpg", ".jpeg", ".png", ".webp", ".part", ".ytdl"}
+    files = [path for path in work_dir.iterdir() if path.is_file() and path.suffix.lower() not in ignored]
+    if not files:
+        raise FileNotFoundError("Output file not found after conversion")
+    if len(files) == 1:
+        return files[0]
+    zip_path = work_dir.parent / f"{work_dir.name}.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(files):
+            archive.write(path, path.name)
+    shutil.rmtree(work_dir, ignore_errors=True)
+    return zip_path
+
+
+def _run_download_job(job_id: str, req: ConvertRequest):
+    job = _download_jobs[job_id]
+    job.status = "running"
+    work_dir = DOWNLOADS_DIR / job_id
+    work_dir.mkdir(exist_ok=True)
+    try:
+        if req.transcript_format:
+            target_format = req.transcript_format.lower()
+            if target_format not in {"txt", "srt", "vtt", "json"}:
+                raise ValueError("Transcript format must be TXT, SRT, VTT or JSON")
+            opts = {
+                **base_ydl_opts(),
+                "skip_download": True,
+                "writesubtitles": True,
+                "writeautomaticsub": True,
+                "subtitleslangs": [req.subtitle_lang or "pt.*", "en.*"],
+                "subtitlesformat": "vtt/best",
+                "outtmpl": str(work_dir / "%(title)s.%(ext)s"),
+                "progress_hooks": [_job_progress_hook(job)],
+                "noplaylist": False,
+            }
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(req.url, download=True)
+            job.title = (info or {}).get("title") or "transcript"
+            sources = [p for p in work_dir.iterdir() if p.suffix.lower() in {".vtt", ".srt"}]
+            if not sources:
+                raise FileNotFoundError("No transcript is available in the selected language")
+            for source in sources:
+                _convert_transcript(source, target_format)
+            output = _choose_output(work_dir, target_format)
+        else:
+            if req.format not in FORMAT_OPTIONS:
+                raise ValueError(f"Unsupported format: {req.format}")
+            output_template = str(work_dir / "%(title)s.%(ext)s")
+            opts = build_ydl_opts(req.format, req.quality, output_template, req)
+            opts["progress_hooks"] = [_job_progress_hook(job)]
+            opts["noplaylist"] = True
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(req.url, download=True)
+            job.title = (info or {}).get("title") or "video"
+            output = _choose_output(work_dir, req.format)
+
+        job.output_path = output
+        extension = output.suffix.lstrip(".")
+        job.filename = f"{safe_filename(req.filename or job.title)}.{extension}"
+        job.progress = 100
+        job.status = "done"
+    except DownloadCancelled:
+        job.status = "cancelled"
+        shutil.rmtree(work_dir, ignore_errors=True)
+    except Exception as error:
+        job.status = "cancelled" if job.cancel_requested else "error"
+        job.error = None if job.cancel_requested else str(error)
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 
 def _run_playlist(job_id: str, url: str, fmt: str, quality: str, album: str):
@@ -167,15 +452,10 @@ def _run_playlist(job_id: str, url: str, fmt: str, quality: str, album: str):
             job.downloaded += 1
             job.current = info.get("title", "")
 
-    opts = {
-        **base_ydl_opts(),
-        **FORMAT_OPTIONS[fmt],
-        "outtmpl": str(work_dir / "%(playlist_index)03d - %(title)s.%(ext)s"),
-        "progress_hooks": [hook],
-        "ignoreerrors": True,
-    }
-    if fmt == "mp4":
-        opts["format"] = video_format_for_quality(quality)
+    opts = build_ydl_opts(
+        fmt, quality, str(work_dir / "%(playlist_index)03d - %(title)s.%(ext)s")
+    )
+    opts.update({"progress_hooks": [hook], "ignoreerrors": True})
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -228,12 +508,7 @@ async def get_video_info(req: ConvertRequest):
     try:
         loop = asyncio.get_event_loop()
         info = await loop.run_in_executor(None, _extract_info, req.url)
-        return {
-            "title": info.get("title", "Unknown"),
-            "duration": info.get("duration", 0),
-            "thumbnail": info.get("thumbnail", ""),
-            "uploader": info.get("uploader", "Unknown"),
-        }
+        return _format_info(info)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not fetch video info: {str(e)}")
 
@@ -271,6 +546,62 @@ async def convert_video(req: ConvertRequest, background_tasks: BackgroundTasks):
         filename=f"{safe_name}.{actual_ext}",
         media_type="application/octet-stream",
     )
+
+
+@app.post("/jobs")
+async def create_download_job(req: ConvertRequest):
+    if not req.transcript_format and req.format not in FORMAT_OPTIONS:
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {req.format}")
+    job_id = uuid.uuid4().hex
+    _download_jobs[job_id] = _DownloadJob(created_at=time.time())
+    threading.Thread(target=_run_download_job, args=(job_id, req), daemon=True).start()
+    return {"job_id": job_id}
+
+
+@app.get("/jobs/{job_id}")
+async def download_job_status(job_id: str):
+    job = _download_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {
+        "status": job.status,
+        "progress": round(job.progress, 1),
+        "downloaded_bytes": job.downloaded_bytes,
+        "total_bytes": job.total_bytes,
+        "speed": job.speed,
+        "eta": job.eta,
+        "current": job.current,
+        "error": job.error,
+        "filename": job.filename,
+    }
+
+
+@app.delete("/jobs/{job_id}")
+async def cancel_download_job(job_id: str):
+    job = _download_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status in {"pending", "running"}:
+        job.cancel_requested = True
+    return {"status": job.status, "cancel_requested": job.cancel_requested}
+
+
+@app.get("/jobs/{job_id}/download")
+async def download_job_file(job_id: str, background_tasks: BackgroundTasks):
+    job = _download_jobs.get(job_id)
+    if not job or job.status != "done" or not job.output_path or not job.output_path.exists():
+        raise HTTPException(status_code=404, detail="Download is not ready")
+    output = job.output_path
+
+    def cleanup():
+        if output.parent.name == job_id:
+            shutil.rmtree(output.parent, ignore_errors=True)
+        else:
+            delete_file_later(str(output))
+        _download_jobs.pop(job_id, None)
+
+    background_tasks.add_task(cleanup)
+    return FileResponse(output, filename=job.filename, media_type="application/octet-stream")
 
 
 @app.post("/convert-playlist")

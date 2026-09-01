@@ -50,7 +50,7 @@
       margin-bottom: 8px;
     }
 
-    input[type="url"] {
+    input[type="url"], input[type="text"], input[type="number"] {
       width: 100%;
       background: #111;
       border: 1px solid #333;
@@ -90,6 +90,11 @@
     }
 
     select:focus { border-color: #ff4444; }
+
+    details.options { margin-top:20px; border-top:1px solid #2a2a2a; padding-top:14px; }
+    details.options summary { cursor:pointer; color:#aaa; font-size:0.88rem; }
+    .check { display:flex; align-items:center; gap:8px; color:#aaa; font-size:0.85rem; margin-top:16px; }
+    .check input { accent-color:#e33; }
 
     #preview {
       display: none;
@@ -289,7 +294,13 @@
         <label for="format" style="margin-top:16px">Format</label>
         <select id="format">
           <option value="mp4">MP4 (Video)</option>
+          <option value="webm">WebM (Video)</option>
+          <option value="mkv">MKV (Video)</option>
           <option value="mp3" selected>MP3 (Audio)</option>
+          <option value="m4a">M4A (Audio)</option>
+          <option value="opus">Opus (Audio)</option>
+          <option value="flac">FLAC (Audio)</option>
+          <option value="wav">WAV (Audio)</option>
         </select>
       </div>
       <div>
@@ -303,6 +314,35 @@
         </select>
       </div>
     </div>
+
+    <details class="options">
+      <summary>Advanced options</summary>
+      <div class="row">
+        <div><label for="start-time">Start (seconds)</label><input id="start-time" type="number" min="0" step="0.1" placeholder="0"></div>
+        <div><label for="end-time">End (seconds)</label><input id="end-time" type="number" min="0" step="0.1" placeholder="Until the end"></div>
+      </div>
+      <div class="row">
+        <div><label for="artist">Artist</label><input id="artist" type="text" placeholder="Video channel"></div>
+        <div><label for="meta-title">Metadata title</label><input id="meta-title" type="text" placeholder="Video title"></div>
+      </div>
+      <div class="row">
+        <div><label for="year">Year</label><input id="year" type="text" placeholder="2026"></div>
+        <div><label for="track">Track</label><input id="track" type="text" placeholder="1"></div>
+      </div>
+      <label class="check"><input id="embed-thumbnail" type="checkbox" checked> Embed thumbnail as cover</label>
+      <label class="check"><input id="compatibility" type="checkbox"> Maximum MP4 compatibility (H.264/AAC)</label>
+      <label class="check"><input id="split-chapters" type="checkbox"> Split chapters into separate files</label>
+      <div id="chapters-list" style="display:none;margin-top:14px;max-height:150px;overflow:auto;background:#111;padding:10px;border-radius:7px;"></div>
+    </details>
+
+    <details class="options">
+      <summary>Transcript</summary>
+      <div class="row">
+        <div><label for="subtitle-lang">Language</label><select id="subtitle-lang"><option value="">Portuguese, then English</option></select></div>
+        <div><label for="transcript-format">Transcript format</label><select id="transcript-format"><option value="txt">TXT</option><option value="srt">SRT</option><option value="vtt">VTT</option><option value="json">JSON</option></select></div>
+      </div>
+      <div class="btn-row"><button id="btn-transcript" onclick="startTranscript()" style="background:#26334a;color:#9fc4ff;">Download Transcript</button></div>
+    </details>
 
     <div class="row">
       <div>
@@ -342,6 +382,12 @@
       <div id="playlist-current" style="color:#666;font-size:0.78rem;margin-top:6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;"></div>
     </div>
 
+    <div id="job-progress" style="display:none;margin-top:16px;padding:12px 14px;background:#111;border:1px solid #2a2a2a;border-radius:8px;font-size:0.85rem;">
+      <div id="job-bar-label" style="color:#aaa;margin-bottom:8px;">Preparing…</div>
+      <div style="background:#222;border-radius:4px;height:7px;overflow:hidden;"><div id="job-bar" style="height:100%;background:linear-gradient(90deg,#b80000,#ff5a36);width:0%;transition:width .3s;"></div></div>
+      <button id="btn-cancel" onclick="cancelJob()" style="margin-top:10px;padding:7px;background:#302020;color:#ff9999;">Cancel</button>
+    </div>
+
     <div id="status"></div>
   </div>
 
@@ -365,6 +411,8 @@
   <div class="format-badges">
     <span class="badge">MP4</span>
     <span class="badge">MP3</span>
+    <span class="badge">M4A</span><span class="badge">Opus</span><span class="badge">FLAC</span>
+    <span class="badge">WebM</span><span class="badge">MKV</span><span class="badge">Transcripts</span>
   </div>
 
   <footer>Powered by yt-dlp &amp; ffmpeg &bull; For personal use only</footer>
@@ -372,6 +420,8 @@
   <script>
     const statusEl  = document.getElementById("status");
     const previewEl = document.getElementById("preview");
+    let activeJobId = null;
+    let currentChapters = [];
 
     function setStatus(html, type = "info") {
       statusEl.innerHTML = `<span class="${type}">${html}</span>`;
@@ -380,6 +430,30 @@
     function fmtDuration(s) {
       const m = Math.floor(s / 60), sec = s % 60;
       return `${m}:${sec.toString().padStart(2, "0")}`;
+    }
+
+    async function responseData(res) {
+      const type = res.headers.get("content-type") || "";
+      if (type.includes("application/json")) return await res.json();
+      const text = await res.text();
+      throw new Error(res.status === 504 ? "The server timed out. Please try again." :
+        `Server error (${res.status}): ${text.replace(/<[^>]*>/g, " ").trim().slice(0, 160) || res.statusText}`);
+    }
+
+    function requestOptions(extra = {}) {
+      const value = id => document.getElementById(id).value.trim();
+      const number = id => value(id) === "" ? null : Number(value(id));
+      return {
+        url: value("url"), format: value("format"), quality: value("quality"),
+        filename: value("filename"), album: value("album"), artist: value("artist"),
+        title: value("meta-title"), year: value("year"), track: value("track"),
+        start_time: number("start-time"), end_time: number("end-time"),
+        embed_thumbnail: document.getElementById("embed-thumbnail").checked,
+        compatibility: document.getElementById("compatibility").checked,
+        split_chapters: document.getElementById("split-chapters").checked,
+        chapter_titles: [...document.querySelectorAll('[name="chapter"]:checked')].map(box => currentChapters[Number(box.value)].title),
+        ...extra,
+      };
     }
 
     async function checkAuth() {
@@ -418,12 +492,35 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url, format: "mp4" }),
         });
-        const data = await res.json();
+        const data = await responseData(res);
         if (!res.ok) throw new Error(data.detail || "Failed");
         document.getElementById("thumb").src       = data.thumbnail;
         document.getElementById("vtitle").textContent = data.title;
         document.getElementById("vsub").textContent   = `${data.uploader} · ${fmtDuration(data.duration)}`;
         previewEl.classList.add("visible");
+        const quality = document.getElementById("quality");
+        const heights = [...new Set(data.formats.map(item => item.height))];
+        quality.innerHTML = '<option value="best">Best available</option>' + heights.map(height => {
+          const variants = data.formats.filter(item => item.height === height);
+          const suffix = variants.some(item => item.fps >= 50) ? " · up to 60 fps" : "";
+          const hdr = variants.some(item => item.hdr) ? " · HDR" : "";
+          const bytes = Math.max(...variants.map(item => item.filesize || 0));
+          const size = bytes ? ` · ~${(bytes / 1048576).toFixed(0)} MB video` : "";
+          return `<option value="${height}p">${height}p${suffix}${hdr}${size}</option>`;
+        }).join("");
+        const lang = document.getElementById("subtitle-lang");
+        lang.innerHTML = '<option value="">Portuguese, then English</option>' + data.subtitles.map(item =>
+          `<option value="${item.language}">${item.language}${item.manual ? " · creator" : " · automatic"}</option>`
+        ).join("");
+        document.getElementById("split-chapters").disabled = data.chapters.length === 0;
+        document.getElementById("split-chapters").parentElement.title = data.chapters.length ?
+          `${data.chapters.length} chapters available` : "This video has no chapters";
+        currentChapters = data.chapters;
+        const chapters = document.getElementById("chapters-list");
+        chapters.style.display = data.chapters.length ? "block" : "none";
+        chapters.innerHTML = data.chapters.map((chapter, index) =>
+          `<label class="check" style="margin-top:5px"><input type="checkbox" name="chapter" value="${index}"> ${fmtDuration(Math.floor(chapter.start_time))} — ${chapter.title.replace(/[<>&"]/g, "")}</label>`
+        ).join("");
         setStatus("");
       } catch (e) {
         setStatus(e.message, "error");
@@ -432,41 +529,61 @@
       }
     }
 
-    async function convert() {
-      const url      = document.getElementById("url").value.trim();
-      const format   = document.getElementById("format").value;
-      const quality  = document.getElementById("quality").value;
-      const customFilename = document.getElementById("filename").value.trim();
-      const album          = document.getElementById("album").value.trim();
-      if (!url) { setStatus("Paste a YouTube URL first.", "error"); return; }
-      setStatus('<span class="spinner"></span>Converting… this may take a moment');
+    async function startJob(options) {
+      if (!options.url) { setStatus("Paste a YouTube URL first.", "error"); return; }
       document.getElementById("btn-convert").disabled = true;
+      document.getElementById("btn-transcript").disabled = true;
       try {
-        const res = await fetch("/convert", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url, format, quality, filename: customFilename, album }),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.detail || "Conversion failed");
-        }
-        const blob        = await res.blob();
-        const disposition = res.headers.get("content-disposition") || "";
-        const match       = disposition.match(/filename="([^"]+)"/);
-        const serverName  = match ? match[1] : `video.${format}`;
-        const ext         = serverName.split(".").pop() || format;
-        const a = document.createElement("a");
-        a.href     = URL.createObjectURL(blob);
-        a.download = customFilename ? `${customFilename}.${ext}` : serverName;
-        a.click();
-        URL.revokeObjectURL(a.href);
-        setStatus("Download started!", "success");
+        const res = await fetch("/jobs", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(options)});
+        const data = await responseData(res);
+        if (!res.ok) throw new Error(data.detail || "Could not start download");
+        activeJobId = data.job_id;
+        document.getElementById("job-progress").style.display = "block";
+        await pollJob(activeJobId);
       } catch (e) {
         setStatus(e.message, "error");
-      } finally {
-        document.getElementById("btn-convert").disabled = false;
+        finishJobUI();
       }
+    }
+
+    async function pollJob(jobId) {
+      try {
+        const res = await fetch(`/jobs/${jobId}`);
+        const data = await responseData(res);
+        if (!res.ok) throw new Error(data.detail || "Could not read download progress");
+        document.getElementById("job-bar").style.width = `${data.progress}%`;
+        const size = data.total_bytes ? ` · ${(data.downloaded_bytes / 1048576).toFixed(1)}/${(data.total_bytes / 1048576).toFixed(1)} MB` : "";
+        const eta = data.eta != null ? ` · ${data.eta}s remaining` : "";
+        document.getElementById("job-bar-label").textContent = `${data.current || "Preparing…"} · ${Math.round(data.progress)}%${size}${eta}`;
+        if (["pending", "running"].includes(data.status)) return setTimeout(() => pollJob(jobId), 1000);
+        if (data.status === "done") {
+          document.getElementById("job-bar").style.width = "100%";
+          const a = document.createElement("a"); a.href = `/jobs/${jobId}/download`; a.download = data.filename; a.click();
+          setStatus("Download ready!", "success");
+        } else if (data.status === "cancelled") setStatus("Download cancelled.", "info");
+        else throw new Error(data.error || "Conversion failed");
+        finishJobUI();
+      } catch (e) { setStatus(e.message, "error"); finishJobUI(); }
+    }
+
+    function finishJobUI() {
+      activeJobId = null;
+      document.getElementById("job-progress").style.display = "none";
+      document.getElementById("btn-convert").disabled = false;
+      document.getElementById("btn-transcript").disabled = false;
+    }
+
+    async function cancelJob() {
+      if (activeJobId) await fetch(`/jobs/${activeJobId}`, {method:"DELETE"});
+    }
+
+    function convert() { return startJob(requestOptions()); }
+
+    function startTranscript() {
+      return startJob(requestOptions({
+        transcript_format: document.getElementById("transcript-format").value,
+        subtitle_lang: document.getElementById("subtitle-lang").value,
+      }));
     }
 
     document.getElementById("url").addEventListener("keydown", (e) => {
@@ -475,11 +592,15 @@
 
     document.getElementById("format").addEventListener("change", (e) => {
       const qualitySel = document.getElementById("quality");
-      const isAudio    = e.target.value === "mp3";
+      const isAudio    = ["mp3", "m4a", "opus", "flac", "wav"].includes(e.target.value);
       Array.from(qualitySel.options).forEach(opt => {
         if (opt.value !== "best") opt.disabled = isAudio;
       });
       if (isAudio) qualitySel.value = "best";
+      const cover = document.getElementById("embed-thumbnail");
+      const supportsCover = !["webm", "wav"].includes(e.target.value);
+      cover.disabled = !supportsCover;
+      if (!supportsCover) cover.checked = false;
     });
 
     async function replaceCookies() {
