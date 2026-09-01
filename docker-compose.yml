@@ -1,12 +1,18 @@
 services:
   youtube-converter:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_WHISPER: ${INSTALL_WHISPER:-false}
     ports:
       - "8000:8000"
     volumes:
       - cookies:/app/data
     environment:
       - COOKIES_PATH=/app/data/cookies.txt
+      - MUSIC_LIBRARY_PATH=/app/data/music-library
+      - MAX_RENDER_JOBS=1
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
     restart: unless-stopped
 
 volumes:

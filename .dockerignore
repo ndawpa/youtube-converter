@@ -2,6 +2,7 @@ venv/
 __pycache__/
 *.pyc
 downloads/
+music_library/
 cookies.txt
 *.db
 *.sqlite

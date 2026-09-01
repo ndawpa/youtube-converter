@@ -17,6 +17,15 @@ audio, playlists and transcripts.
 - Embedded thumbnail where supported, plus chapters and custom title, artist,
   album, year and track metadata (WAV and WebM do not support embedded covers)
 - Playlist downloads as ZIP files
+- Automatic highlight, educational, funny, impact, Shorts and music clip analysis
+- Reviewable clip candidates with editable start/end timestamps
+- Burned ASS captions with bold, highlight and minimal styles
+- 9:16, 1:1 and 16:9 layouts with center crop or fit framing
+- Optional silence removal with synchronized video, audio and captions
+- Musical-passage detection based on spectral stability
+- Licensed background-music library with mood, energy and BPM matching
+- Background loops, fades, speech ducking and EBU loudness normalization
+- Fully automatic clip generation mode
 
 ## Run locally
 
@@ -52,6 +61,62 @@ qualities that the video does not have.
 Transcripts prefer creator-provided subtitles when available and can also use
 YouTube automatic captions. TXT removes timestamps, while JSON returns a
 `segments` array with `start`, `end` and `text` fields.
+
+## Automatic clips
+
+Paste a video URL in the main field, open **Automatic Clips**, choose an
+objective and click **Analyze video**. Analysis downloads a maximum 720p working
+copy to limit memory use and combines:
+
+- transcript keyword, punctuation, density and sentence-completeness signals;
+- visual scene-change density;
+- spectral flatness, flux and RMS energy for musical passages.
+
+Candidates are deliberately shown for review because “interesting” is
+subjective. Their start/end values can be edited before rendering. Selecting
+**Fully automatic** skips review and renders the ranked speech candidates, or
+detected musical passages when the Music objective is selected.
+
+The caption pipeline first uses creator subtitles, then YouTube automatic
+captions. If neither exists, it uses a locally installed `whisper` CLI with the
+model configured by `WHISPER_MODEL` (default `small`). Whisper is optional and
+is not installed in the lightweight Docker image; use a custom worker image if
+captionless videos must be supported.
+
+Build the opt-in Whisper image with:
+
+```bash
+docker build --build-arg INSTALL_WHISPER=true -t youtube-converter:whisper .
+```
+
+### Licensed background music
+
+Upload tracks through **Licensed music library** and confirm usage rights. Each
+track stores mood, energy, BPM and its license/source. Automatic selection ranks
+the mood and energy inferred from the spoken content first, then chooses the closest BPM (including half/double-tempo
+matches). Music is looped to the clip duration, faded at both ends, lowered
+during speech with sidechain compression and mixed to a normalized -16 LUFS
+target. WAV and other supported audio uploads are limited to 100 MB.
+
+Uploaded tracks are stored under `MUSIC_LIBRARY_PATH`. The Helm deployment maps
+this to `/app/data/music-library`; use persistent storage in production if the
+library must survive pod replacement.
+
+### Resource controls
+
+`MAX_RENDER_JOBS` controls concurrent analysis/render operations and defaults to
+`1`. FFmpeg rendering and local speech recognition are resource-intensive. For
+Whisper or multiple concurrent renders, run separate workers with at least
+4–8 GiB of memory rather than raising concurrency in the default 1 GiB pod.
+
+Automatic-clip endpoints:
+
+- `POST /clip-jobs` starts analysis.
+- `GET /clip-jobs/{id}` returns progress, candidates and detected music blocks.
+- `POST /clip-jobs/{id}/render` renders reviewed selections.
+- `GET /clip-jobs/{id}/download` downloads the resulting ZIP.
+- `DELETE /clip-jobs/{id}` requests cancellation.
+- `GET/POST /music-library` lists or uploads licensed music.
 
 ## Authentication
 

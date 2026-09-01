@@ -182,6 +182,14 @@
       color: #888;
     }
 
+    .clip-card { margin-top:18px; }
+    .clip-list { display:grid; gap:10px; margin-top:14px; }
+    .clip-item { background:#111; border:1px solid #333; border-radius:9px; padding:12px; }
+    .clip-item .clip-title { color:#ddd; font-weight:600; font-size:.88rem; }
+    .clip-item .clip-reason { color:#777; font-size:.76rem; margin:5px 0 9px; }
+    .clip-time { display:grid; grid-template-columns:auto 1fr 1fr; gap:8px; align-items:center; }
+    .clip-time input { padding:7px 9px; font-size:.82rem; }
+
     footer { margin-top: 40px; color: #444; font-size: 0.78rem; text-align: center; }
 
     .cookies-update {
@@ -391,6 +399,60 @@
     <div id="status"></div>
   </div>
 
+  <div class="card clip-card">
+    <h2 style="font-size:1.15rem;margin-bottom:5px;">Automatic Clips</h2>
+    <p style="color:#777;font-size:.82rem;line-height:1.5;">Find highlights, review the time ranges and create captioned Shorts, Reels or horizontal clips.</p>
+    <div class="row">
+      <div><label for="clip-objective">Objective</label><select id="clip-objective"><option value="highlights">Best moments</option><option value="educational">Educational</option><option value="funny">Funny moments</option><option value="impact">Impact quotes</option><option value="shorts">Shorts / Reels</option><option value="music">Musical passages</option></select></div>
+      <div><label for="clip-count">Number of clips</label><input id="clip-count" type="number" min="1" max="10" value="3"></div>
+    </div>
+    <div class="row">
+      <div><label for="clip-min">Minimum seconds</label><input id="clip-min" type="number" min="5" value="25"></div>
+      <div><label for="clip-max">Maximum seconds</label><input id="clip-max" type="number" min="5" value="60"></div>
+    </div>
+    <div class="row">
+      <div><label for="clip-language">Transcript language</label><input id="clip-language" type="text" placeholder="pt-BR (automatic if blank)"></div>
+      <div><label class="check"><input id="detect-music" type="checkbox" checked> Detect musical passages</label></div>
+    </div>
+    <label class="check"><input id="automatic-clips" type="checkbox"> Fully automatic: render immediately with defaults</label>
+    <div class="btn-row"><button id="btn-analyze-clips" onclick="analyzeClips()" style="background:linear-gradient(135deg,#6428a8,#9d4edd);color:white;">Analyze video</button></div>
+    <div id="clip-progress" style="display:none;margin-top:15px;"><div id="clip-phase" style="font-size:.82rem;color:#aaa;margin-bottom:7px;"></div><div style="height:7px;background:#222;border-radius:4px;overflow:hidden"><div id="clip-bar" style="height:100%;width:0;background:#9d4edd;transition:width .3s"></div></div></div>
+
+    <div id="clip-review" style="display:none;margin-top:20px;border-top:1px solid #333;padding-top:16px;">
+      <h3 style="font-size:.95rem;">Review candidates</h3>
+      <video id="clip-preview-video" controls playsinline style="display:none;width:100%;max-height:360px;background:#000;border-radius:8px;margin-top:12px;"></video>
+      <div id="clip-candidates" class="clip-list"></div>
+      <div class="row">
+        <div><label for="clip-aspect">Aspect ratio</label><select id="clip-aspect"><option value="9:16">9:16 — Shorts/Reels</option><option value="1:1">1:1 — Square</option><option value="16:9">16:9 — Horizontal</option></select></div>
+        <div><label for="clip-reframe">Framing</label><select id="clip-reframe"><option value="center">Center crop</option><option value="fit">Fit with black bars</option></select></div>
+      </div>
+      <div class="row">
+        <div><label for="subtitle-style">Caption style</label><select id="subtitle-style"><option value="bold">Bold</option><option value="highlight">Yellow highlight</option><option value="minimal">Minimal</option></select></div>
+        <div><label for="music-track">Background track</label><select id="music-track"><option value="auto">Automatic licensed track</option></select></div>
+      </div>
+      <label class="check"><input id="burn-subtitles" type="checkbox" checked> Burn synchronized captions</label>
+      <label class="check"><input id="remove-silence" type="checkbox"> Remove long silences</label>
+      <label class="check"><input id="add-background-music" type="checkbox"> Add background music with automatic ducking</label>
+      <div class="row">
+        <div><label for="music-mood">Music mood</label><select id="music-mood"><option value="inspiring">Inspiring</option><option value="calm">Calm</option><option value="dramatic">Dramatic</option><option value="happy">Happy</option><option value="dark">Dark</option></select></div>
+        <div><label for="music-energy">Music energy</label><select id="music-energy"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></div>
+      </div>
+      <div><label for="music-volume" style="margin-top:16px">Music volume</label><input id="music-volume" type="number" min="0" max="1" step=".01" value=".16"></div>
+      <div class="btn-row"><button id="btn-render-clips" onclick="renderClips()" style="background:#2d6a4f;color:#b7e4c7;">Render selected clips</button><button onclick="cancelClipJob()" style="background:#382020;color:#ff9999;">Cancel</button></div>
+    </div>
+  </div>
+
+  <details class="cookies-update">
+    <summary>Licensed music library</summary>
+    <div style="margin-top:10px;color:#888;font-size:.82rem;line-height:1.6;">Only upload tracks you own or are licensed to use. License information is stored with each track.</div>
+    <div class="row"><div><label for="music-file">Audio file</label><input id="music-file" type="file" accept="audio/*"></div><div><label for="music-title">Title</label><input id="music-title" type="text"></div></div>
+    <div class="row"><div><label for="library-mood">Mood</label><select id="library-mood"><option>inspiring</option><option>calm</option><option>dramatic</option><option>happy</option><option>dark</option></select></div><div><label for="library-energy">Energy</label><select id="library-energy"><option>low</option><option selected>medium</option><option>high</option></select></div></div>
+    <div class="row"><div><label for="library-bpm">BPM</label><input id="library-bpm" type="number" min="30" max="250"></div><div><label for="music-license">License/source</label><input id="music-license" type="text" placeholder="Owned, CC0, license ID..."></div></div>
+    <label class="check"><input id="music-licensed" type="checkbox"> I confirm I am licensed to use this track</label>
+    <div class="btn-row"><button onclick="uploadMusic()" style="background:#26334a;color:#9fc4ff;">Add licensed track</button></div>
+    <div id="music-library-list" style="margin-top:10px;color:#777;font-size:.8rem;"></div>
+  </details>
+
   <details class="cookies-update">
     <summary>Update cookies.txt</summary>
     <div style="margin-top:10px;font-size:0.82rem;color:#888;line-height:1.9;">
@@ -422,6 +484,10 @@
     const previewEl = document.getElementById("preview");
     let activeJobId = null;
     let currentChapters = [];
+    let currentClipJobId = null;
+    let currentClipCandidates = [];
+    let currentMusicBlocks = [];
+    let clipPreviewStop = null;
 
     function setStatus(html, type = "info") {
       statusEl.innerHTML = `<span class="${type}">${html}</span>`;
@@ -705,7 +771,164 @@
       }, 2000);
     }
 
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>'"]/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[char]);
+    }
+
+    async function analyzeClips() {
+      const url = document.getElementById("url").value.trim();
+      if (!url) { setStatus("Paste a YouTube URL first.", "error"); return; }
+      const button = document.getElementById("btn-analyze-clips");
+      button.disabled = true;
+      document.getElementById("clip-review").style.display = "none";
+      document.getElementById("clip-progress").style.display = "block";
+      try {
+        const res = await fetch("/clip-jobs", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({
+          url, objective:document.getElementById("clip-objective").value,
+          count:Number(document.getElementById("clip-count").value),
+          min_duration:Number(document.getElementById("clip-min").value),
+          max_duration:Number(document.getElementById("clip-max").value),
+          language:document.getElementById("clip-language").value.trim(),
+          detect_music:document.getElementById("detect-music").checked,
+          automatic:document.getElementById("automatic-clips").checked,
+        })});
+        const data = await responseData(res);
+        if (!res.ok) throw new Error(data.detail || "Could not start clip analysis");
+        currentClipJobId = data.job_id;
+        pollClipJob();
+      } catch (error) {
+        setStatus(error.message, "error"); button.disabled = false;
+      }
+    }
+
+    async function pollClipJob() {
+      if (!currentClipJobId) return;
+      try {
+        const res = await fetch(`/clip-jobs/${currentClipJobId}`);
+        const data = await responseData(res);
+        if (!res.ok) throw new Error(data.detail || "Could not read clip job");
+        document.getElementById("clip-phase").textContent = `${data.phase} · ${Math.round(data.progress)}%`;
+        document.getElementById("clip-bar").style.width = `${data.progress}%`;
+        if (["pending", "analyzing", "rendering"].includes(data.status)) return setTimeout(pollClipJob, 1200);
+        if (data.status === "ready") {
+          showClipReview(data);
+          document.getElementById("btn-analyze-clips").disabled = false;
+        } else if (data.status === "done") {
+          const a = document.createElement("a"); a.href = `/clip-jobs/${currentClipJobId}/download`; a.click();
+          setStatus("Automatic clips ZIP is ready!", "success");
+          document.getElementById("btn-analyze-clips").disabled = false;
+          document.getElementById("btn-render-clips").disabled = false;
+        } else {
+          throw new Error(data.error || (data.status === "cancelled" ? "Clip job cancelled" : "Clip job failed"));
+        }
+      } catch (error) {
+        setStatus(error.message, "error");
+        document.getElementById("btn-analyze-clips").disabled = false;
+        document.getElementById("btn-render-clips").disabled = false;
+      }
+    }
+
+    function showClipReview(data) {
+      currentClipCandidates = data.candidates;
+      currentMusicBlocks = data.music_blocks;
+      document.getElementById("music-mood").value = data.suggested_mood || "inspiring";
+      document.getElementById("music-energy").value = data.suggested_energy || "medium";
+      const rows = data.candidates.map((clip, index) => `
+        <div class="clip-item"><div class="clip-title">${escapeHtml(clip.title)}</div>
+        <div class="clip-reason">Score ${clip.score.toFixed(1)} · ${escapeHtml(clip.reason)}</div>
+        <div class="clip-time"><input type="checkbox" class="clip-choice" data-index="${index}" checked>
+        <input type="number" class="clip-start" data-index="${index}" step=".1" value="${clip.start}">
+        <input type="number" class="clip-end" data-index="${index}" step=".1" value="${clip.end}"></div>
+        <button onclick="previewClip(${index})" style="margin-top:8px;padding:7px;background:#292929;color:#bbb;">Preview interval</button></div>`);
+      data.music_blocks.forEach((block, index) => rows.push(`
+        <div class="clip-item"><div class="clip-title">Detected music passage ${index + 1}</div>
+        <div class="clip-reason">${fmtDuration(Math.floor(block.start))}–${fmtDuration(Math.floor(block.end))}</div>
+        <label class="check"><input type="checkbox" class="music-block-choice" data-index="${index}"> Include this musical cut</label></div>`));
+      document.getElementById("clip-candidates").innerHTML = rows.join("");
+      document.getElementById("clip-review").style.display = "block";
+    }
+
+    function previewClip(index) {
+      const video = document.getElementById("clip-preview-video");
+      const start = Number(document.querySelector(`.clip-start[data-index="${index}"]`).value);
+      const end = Number(document.querySelector(`.clip-end[data-index="${index}"]`).value);
+      video.style.display = "block";
+      if (!video.src) video.src = `/clip-jobs/${currentClipJobId}/source`;
+      if (clipPreviewStop) video.removeEventListener("timeupdate", clipPreviewStop);
+      clipPreviewStop = () => { if (video.currentTime >= end) { video.pause(); video.removeEventListener("timeupdate", clipPreviewStop); } };
+      const playInterval = () => {
+        video.currentTime = start;
+        video.play();
+        video.addEventListener("timeupdate", clipPreviewStop);
+      };
+      if (video.readyState >= 1) playInterval();
+      else video.addEventListener("loadedmetadata", playInterval, {once:true});
+    }
+
+    async function renderClips() {
+      if (!currentClipJobId) return;
+      const selections = [...document.querySelectorAll(".clip-choice:checked")].map(box => {
+        const index = Number(box.dataset.index);
+        return {index, start:Number(document.querySelector(`.clip-start[data-index="${index}"]`).value),
+          end:Number(document.querySelector(`.clip-end[data-index="${index}"]`).value), title:currentClipCandidates[index].title};
+      });
+      const musicBlocks = [...document.querySelectorAll(".music-block-choice:checked")].map(box => Number(box.dataset.index));
+      if (!selections.length && !musicBlocks.length) { setStatus("Select at least one clip.", "error"); return; }
+      const button = document.getElementById("btn-render-clips"); button.disabled = true;
+      try {
+        const res = await fetch(`/clip-jobs/${currentClipJobId}/render`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({
+          selections, music_block_indexes:musicBlocks,
+          aspect_ratio:document.getElementById("clip-aspect").value,
+          reframe:document.getElementById("clip-reframe").value,
+          subtitle_style:document.getElementById("subtitle-style").value,
+          burn_subtitles:document.getElementById("burn-subtitles").checked,
+          remove_silence:document.getElementById("remove-silence").checked,
+          add_background_music:document.getElementById("add-background-music").checked,
+          music_track_id:document.getElementById("music-track").value,
+          music_mood:document.getElementById("music-mood").value,
+          music_energy:document.getElementById("music-energy").value,
+          music_volume:Number(document.getElementById("music-volume").value),
+        })});
+        const data = await responseData(res);
+        if (!res.ok) throw new Error(data.detail || "Could not start rendering");
+        pollClipJob();
+      } catch (error) { setStatus(error.message, "error"); button.disabled = false; }
+    }
+
+    async function cancelClipJob() {
+      if (currentClipJobId) await fetch(`/clip-jobs/${currentClipJobId}`, {method:"DELETE"});
+    }
+
+    async function loadMusicLibrary() {
+      try {
+        const res = await fetch("/music-library"); const data = await responseData(res);
+        const select = document.getElementById("music-track");
+        select.innerHTML = '<option value="auto">Automatic licensed track</option>' + data.tracks.map(track =>
+          `<option value="${track.id}">${escapeHtml(track.title)} · ${escapeHtml(track.mood)} · ${track.bpm || "?"} BPM</option>`).join("");
+        document.getElementById("music-library-list").textContent = data.tracks.length ?
+          `${data.tracks.length} licensed track(s) available.` : "No licensed tracks uploaded yet.";
+      } catch (_) {}
+    }
+
+    async function uploadMusic() {
+      const file = document.getElementById("music-file").files[0];
+      if (!file) { setStatus("Choose a music file.", "error"); return; }
+      const form = new FormData();
+      form.append("file", file); form.append("title", document.getElementById("music-title").value || file.name);
+      form.append("mood", document.getElementById("library-mood").value);
+      form.append("energy", document.getElementById("library-energy").value);
+      const bpm = document.getElementById("library-bpm").value; if (bpm) form.append("bpm", bpm);
+      form.append("license_name", document.getElementById("music-license").value);
+      form.append("licensed", document.getElementById("music-licensed").checked);
+      try {
+        const res = await fetch("/music-library", {method:"POST", body:form}); const data = await responseData(res);
+        if (!res.ok) throw new Error(data.detail || "Upload failed");
+        setStatus("Licensed music added.", "success"); loadMusicLibrary();
+      } catch (error) { setStatus(error.message, "error"); }
+    }
+
     checkAuth();
+    loadMusicLibrary();
   </script>
 </body>
 </html>

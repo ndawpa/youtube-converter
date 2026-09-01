@@ -38,6 +38,12 @@ spec:
           env:
             - name: COOKIES_PATH
               value: /app/data/cookies.txt
+            - name: MUSIC_LIBRARY_PATH
+              value: /app/data/music-library
+            - name: MAX_RENDER_JOBS
+              value: {{ .Values.clipProcessing.maxConcurrentRenders | quote }}
+            - name: WHISPER_MODEL
+              value: {{ .Values.clipProcessing.whisperModel | quote }}
           livenessProbe:
             httpGet:
               path: /cookies-status

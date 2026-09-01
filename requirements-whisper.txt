@@ -1,0 +1,3 @@
+# Optional local transcription fallback for videos without YouTube captions.
+# This installs PyTorch and substantially increases image size and memory usage.
+openai-whisper

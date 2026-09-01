@@ -1,5 +1,6 @@
 import unittest
 import json
+import subprocess
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -148,6 +149,127 @@ class DownloadOptionsTests(unittest.TestCase):
             self.assertEqual(job.progress, 100)
             self.assertEqual(job.filename, "Example.mp4")
             self.assertEqual(job.output_path.read_bytes(), b"media")
+
+    def test_music_selection_prioritizes_mood_energy_and_bpm(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(main, "MUSIC_DIR", Path(directory)), \
+                patch.object(main, "MUSIC_MANIFEST", Path(directory) / "tracks.json"):
+            tracks = [
+                {"id": "slow", "filename": "slow.mp3", "mood": "calm", "energy": "low", "bpm": 70},
+                {"id": "match", "filename": "match.mp3", "mood": "inspiring", "energy": "high", "bpm": 136},
+            ]
+            for track in tracks:
+                (Path(directory) / track["filename"]).write_bytes(b"audio")
+            main._save_music_tracks(tracks)
+
+            selected = main._select_music_track("auto", "inspiring", "high")
+
+            self.assertEqual(selected.name, "match.mp3")
+
+    def test_ffmpeg_sigkill_has_actionable_error(self):
+        error = subprocess.CalledProcessError(-9, ["ffmpeg"], stderr="")
+        with patch.object(main.subprocess, "run", side_effect=error):
+            with self.assertRaisesRegex(RuntimeError, "ran out of memory"):
+                main._run_media_command(["ffmpeg"])
+
+    def test_clip_analysis_job_reaches_review_state(self):
+        class FakeYoutubeDL:
+            def __init__(self, opts):
+                self.opts = opts
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def extract_info(self, _url, download):
+                self.assert_download(download)
+                template = self.opts["outtmpl"]
+                Path(template.replace("%(ext)s", "mp4")).write_bytes(b"video")
+                Path(template.replace("%(ext)s", "pt.vtt")).write_text(
+                    "WEBVTT\n\n00:00:00.000 --> 00:00:10.000\nIntrodução importante.\n\n"
+                    "00:00:10.000 --> 00:00:20.000\nEste é o principal segredo!\n\n"
+                    "00:00:20.000 --> 00:00:30.000\nVeja como obter o melhor resultado.\n"
+                )
+                return {"title": "Example"}
+
+            def assert_download(self, value):
+                if not value:
+                    raise AssertionError("expected download")
+
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(main, "DOWNLOADS_DIR", Path(directory)), \
+                patch.object(main.yt_dlp, "YoutubeDL", FakeYoutubeDL), \
+                patch.object(main, "detect_scene_changes", return_value=[12]), \
+                patch.object(main, "analyze_spectral_frames", return_value=[
+                    {"time": 12, "rms": .2, "flatness": .2, "flux": .2},
+                ]):
+            job_id = "clip-analysis"
+            main._clip_jobs[job_id] = main._ClipJob()
+            request = main.AutoClipRequest(
+                url="https://example.test", min_duration=20, max_duration=35
+            )
+            main._run_clip_analysis(job_id, request)
+            job = main._clip_jobs.pop(job_id)
+
+            self.assertEqual(job.status, "ready")
+            self.assertEqual(job.title, "Example")
+            self.assertTrue(job.candidates)
+
+    def test_clip_render_job_creates_zip(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(main, "DOWNLOADS_DIR", Path(directory)):
+            work_dir = Path(directory) / "work"
+            work_dir.mkdir()
+            source = work_dir / "source.mp4"
+            source.write_bytes(b"source")
+            job_id = "clip-render"
+            main._clip_jobs[job_id] = main._ClipJob(
+                status="ready", work_dir=work_dir, source_path=source,
+                segments=[main.TranscriptSegment(0, 30, "Words")],
+                candidates=[main.ClipCandidate(0, 30, 5, "Title", "Reason", "Words")],
+            )
+
+            def fake_render(_job, _candidate, index, _request, _music):
+                output = work_dir / f"clip-{index}.mp4"
+                output.write_bytes(b"clip")
+                return output
+
+            with patch.object(main, "_render_clip", side_effect=fake_render):
+                main._run_clip_render(job_id, main.RenderClipsRequest())
+            job = main._clip_jobs.pop(job_id)
+
+            self.assertEqual(job.status, "done")
+            self.assertTrue(job.output_path.exists())
+
+    def test_music_analysis_does_not_require_transcript(self):
+        class FakeYoutubeDL:
+            def __init__(self, opts): self.opts = opts
+            def __enter__(self): return self
+            def __exit__(self, *_args): return False
+            def extract_info(self, _url, download):
+                Path(self.opts["outtmpl"].replace("%(ext)s", "mp4")).write_bytes(b"video")
+                return {"title": "Instrumental"}
+
+        musical_rows = [
+            {"time": second, "rms": .1, "flatness": .2, "flux": .2}
+            for second in range(20)
+        ]
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(main, "DOWNLOADS_DIR", Path(directory)), \
+                patch.object(main.yt_dlp, "YoutubeDL", FakeYoutubeDL), \
+                patch.object(main, "analyze_spectral_frames", return_value=musical_rows), \
+                patch.object(main, "which", return_value=None):
+            job_id = "music-analysis"
+            main._clip_jobs[job_id] = main._ClipJob()
+            main._run_clip_analysis(job_id, main.AutoClipRequest(
+                url="https://example.test", objective="music", min_duration=8
+            ))
+            job = main._clip_jobs.pop(job_id)
+
+            self.assertEqual(job.status, "ready")
+            self.assertEqual(job.candidates, [])
+            self.assertTrue(job.music_blocks)
 
 
 if __name__ == "__main__":

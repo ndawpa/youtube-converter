@@ -43,6 +43,12 @@ resources:
     cpu: 2000m
     memory: 1Gi
 
+clipProcessing:
+  # FFmpeg rendering is memory-intensive. Keep this at 1 for the default 1 Gi limit.
+  maxConcurrentRenders: 1
+  # Used only when a Whisper CLI is included in a custom image.
+  whisperModel: small
+
 # Increase if you expect concurrent conversions
 # (each conversion is CPU/memory-heavy)
 autoscaling:
